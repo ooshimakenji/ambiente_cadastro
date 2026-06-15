@@ -1,0 +1,102 @@
+// =====================================================================
+// schema.prisma — dashboard_cadastro
+// Provider SQLite nesta v1. Para migrar a PostgreSQL depois:
+//   1. provider = "postgresql"
+//   2. DATABASE_URL apontando p/ o Postgres da rede interna (.env)
+//   3. `diff` (String JSON) pode virar Json nativo no Postgres
+//   4. rodar `prisma migrate` — nenhuma query Prisma muda
+// Enums: NÃO usados (Prisma não suporta enum no provider sqlite).
+//   Campos de "enum" são String validada por zod no server, espelhando
+//   as constantes de app/src/lib/types.ts (StatusOS, Papel, etc.).
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // TROCAR p/ "postgresql" na migração
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  login     String   @unique
+  senhaHash String
+  papel     String   @default("SUPERVISOR") // ADMIN | SUPERVISOR
+  ativo     Boolean  @default(true)
+  equipeId  Int?
+  equipe    Equipe?  @relation(fields: [equipeId], references: [id])
+  criadoEm  DateTime @default(now())
+
+  // relações reversas
+  ordensCriadas     OrdemServico[] @relation("OrdensCriadas")
+  ordensResponsavel OrdemServico[] @relation("OrdensResponsavel")
+  eventos           EventoAuditoria[]
+
+  @@index([equipeId])
+}
+
+model Equipe {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  descricao String?
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  usuarios Usuario[]
+  ordens   OrdemServico[]
+}
+
+model TipoServico {
+  id       Int      @id @default(autoincrement())
+  nome     String
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  // relação reversa
+  ordens OrdemServico[]
+}
+
+model OrdemServico {
+  id          Int      @id @default(autoincrement())
+  sequencial  String   @unique // ID bipado da OS (imutável); não é mais autoincrement de negócio
+  anotacoes   String?
+  status      String   @default("PENDENTE") // PENDENTE|ATENDENDO|CONCLUIDA|CANCELADA
+  fotos       String? // COM_FOTOS | SEM_FOTOS | null (setado no recebimento)
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  concluidoEm DateTime?
+
+  // relações
+  tipoServicoId Int?
+  tipoServico   TipoServico? @relation(fields: [tipoServicoId], references: [id])
+  equipeId      Int?
+  equipe        Equipe?  @relation(fields: [equipeId], references: [id])
+  responsavelId Int?
+  responsavel   Usuario? @relation("OrdensResponsavel", fields: [responsavelId], references: [id])
+  criadoPorId   Int
+  criadoPor     Usuario  @relation("OrdensCriadas", fields: [criadoPorId], references: [id])
+
+  @@index([status])
+  @@index([equipeId])
+  @@index([responsavelId])
+  @@index([tipoServicoId])
+}
+
+model EventoAuditoria {
+  id         Int      @id @default(autoincrement())
+  entidade   String // OS | USUARIO | EQUIPE | TIPO_SERVICO
+  entidadeId Int
+  acao       String // CRIACAO|ATUALIZACAO|MUDANCA_STATUS|EXCLUSAO|LOGIN|LOGOUT
+  autorId    Int?
+  autor      Usuario? @relation(fields: [autorId], references: [id])
+  descricao  String
+  diff       String? // JSON serializado (antes/depois). Vira Json no Postgres.
+  criadoEm   DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@index([autorId])
+  @@index([criadoEm])
+}

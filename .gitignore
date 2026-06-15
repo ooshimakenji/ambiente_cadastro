@@ -1,0 +1,13 @@
+# Lixo de SO / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Logs
+*.log
+scraper.log
+npm-debug.log*
+
+# Os .gitignore de app/ e server/ cobrem node_modules, dist, .env, *.db e prisma/dev.db.
