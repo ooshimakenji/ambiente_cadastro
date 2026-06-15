@@ -32,8 +32,19 @@ Evoluir o `ambiental_cadastro` do modelo linear (1 OS = 1 registro, `sequencial 
   - Fix extra (não previsto): `app/src/components/Filtros.tsx` — `LABEL_ENTIDADE` ganhou `SAIDA`/`FOLHA_ENVIO`.
   - **NOTA**: o scaffolding de `App.tsx`/`AppShell.tsx` (nav `folhas`) e o param `isAdmin` em `useAutoLogout.ts` já
     existiam antes da Fase B (criados junto do contrato); a Fase B só completou o que faltava.
-- ⏳ **FASE C** (review adversarial Opus + verify E2E HTTP) — PRÓXIMO PASSO.
-- Git: branch `main`. Commits v3: `a284595` (Fase A) + commit da Fase B (este). HANDOFF anterior em `d8de867`.
+- ✅ **FASE C CONCLUÍDA** — review adversarial (Opus) + verify E2E HTTP (:3001) **28/28 OK**.
+  - Review achou 2 [ALTO] + 1 [MÉDIO], todos corrigidos: (a) ReceberOS pegava a 1ª saída EM_CAMPO em vez da
+    última (após re-despacho); (b) CadastrarOS tinha race entre verificar sequencial e submeter no Enter
+    (mensagem/decisão com estado stale) → `verificarSequencial` agora retorna a OS e `cadastrar(existente?)`
+    decide com dado fresco; (c) re-despacho de OS CANCELADA agora é bloqueado/avisado antes do POST. Também
+    corrigido texto enganoso "Pendente/Atendimento" (status inexistentes no v3).
+  - E2E validou: multi-saída append-only (NAO_REALIZADO mantém ABERTA; re-despacho soma saída sem sobrescrever),
+    CONCLUIDA+SEM_FOTOS fecha OS com pendência de foto, aguardando-fotos, regularização via saída FOTO,
+    folhas casa + `enviadaCasaEm`, `DELETE /ordens`→404, DELETE tipo/equipe em uso→409.
+  - "Admin não cai por inatividade": verificado por código (`useAutoLogout(…, isAdmin)` + `App.tsx` passa o param).
+  - Builds app+server **verdes** após as correções.
+- Git: branch `main`. Commits v3: `a284595` (Fase A) + `fc9daf4` (Fase B) + commit da Fase C (este). Sem push.
+- ⏭️ **PRÓXIMO (fora desta leva):** Parte 5 — integração data.json (publicador + validação local). Notas futuras abaixo.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## CONTRATO v3 (settado na Fase A — fonte para a Fase B)
@@ -92,7 +103,7 @@ Typecheck: `cd app && npm run build` (NÃO `tsc --noEmit`).
 ## Checklist
 ### Fase A — [x] CONCLUÍDA (commit a284595)
 ### Fase B — [x] Unidade 1 (bipagem) · [x] Unidade 2 (OrdensServico) · [x] Unidade 3 (nav/logout/cosmético) · [x] build app verde · [x] commit
-### Fase C — [ ] review · [ ] verify E2E · [ ] HANDOFF final + commit
+### Fase C — [x] review · [x] verify E2E (28/28) · [x] HANDOFF final + commit
 
 ## Como retomar (comandos)
 ```

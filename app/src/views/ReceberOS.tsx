@@ -171,8 +171,9 @@ function AbaReceber({ m3, elev, toast }: AbaReceberProps) {
       const os = lista[0]
       setOrdem(os)
 
-      // Encontra a saída EM_CAMPO (aberta)
-      const aberta = os.saidas.find((s) => s.status === 'EM_CAMPO') ?? null
+      // Encontra a saída EM_CAMPO mais recente (saidas vêm em ordem asc;
+      // pode haver mais de uma aberta após re-despacho → recebe a última).
+      const aberta = [...os.saidas].reverse().find((s) => s.status === 'EM_CAMPO') ?? null
       setSaidaAberta(aberta)
 
       if (!aberta) {

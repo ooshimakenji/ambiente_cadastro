@@ -107,32 +107,40 @@ export default function CadastrarOS() {
   }
 
   // Consulta a API para ver se o sequencial já existe
-  async function verificarSequencial(seq: string) {
+  async function verificarSequencial(seq: string): Promise<OrdemServicoExpandida | null> {
     const seqTrim = seq.trim()
     if (!seqTrim) {
       setOsExistente(null)
-      return
+      return null
     }
     setBuscandoSequencial(true)
     try {
       const lista = await api.get<OrdemServicoExpandida[]>(
         `/ordens?sequencial=${encodeURIComponent(seqTrim)}`,
       )
-      if (lista && lista.length > 0) {
-        setOsExistente(lista[0])
-      } else {
-        setOsExistente(null)
-      }
+      const encontrada = lista && lista.length > 0 ? lista[0] : null
+      setOsExistente(encontrada)
+      return encontrada
     } catch {
       // falha silenciosa — não bloqueia o cadastro
       setOsExistente(null)
+      return null
     } finally {
       setBuscandoSequencial(false)
     }
   }
 
-  async function cadastrar() {
+  // `existente` pode ser passado explicitamente (fluxo Enter) para evitar
+  // depender do estado, que ainda não reflete a verificação recém-disparada.
+  async function cadastrar(existente?: OrdemServicoExpandida | null) {
     if (!sequencial.trim() || tipoServicoId === '') return
+
+    const os = existente !== undefined ? existente : osExistente
+    // Re-despacho de OS cancelada é bloqueado pelo backend (409); avisamos antes.
+    if (os && os.status === 'CANCELADA') {
+      toast(`OS ${sequencial.trim()} está cancelada — não é possível adicionar saída.`)
+      return
+    }
 
     setEnviando(true)
     try {
@@ -144,7 +152,7 @@ export default function CadastrarOS() {
         anotacoes: anotacoes.trim() || null,
       }
       await api.post<OrdemServicoExpandida>('/ordens', body)
-      const msg = osExistente
+      const msg = os
         ? `Nova saída criada para OS ${sequencial.trim()}`
         : `OS ${sequencial.trim()} cadastrada com sucesso`
       toast(msg)
@@ -157,12 +165,12 @@ export default function CadastrarOS() {
     }
   }
 
-  function handleSequencialKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  async function handleSequencialKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    if (!sequencial.trim()) return
-    // Dispara verificação e avança
-    verificarSequencial(sequencial)
+    if (!sequencial.trim() || enviando) return
+    // Aguarda a verificação para decidir mensagem/bloqueio com dado fresco.
+    const encontrada = await verificarSequencial(sequencial)
     if (tipoServicoId === '') {
       // Move foco para o select de tipo
       const selectEl = tipoSelectRef.current?.querySelector('div[role="combobox"]') as HTMLElement | null
@@ -170,14 +178,15 @@ export default function CadastrarOS() {
       return
     }
     // Tudo preenchido (mínimo obrigatório) — submete
-    cadastrar()
+    cadastrar(encontrada)
   }
 
   function handleSequencialBlur() {
     verificarSequencial(sequencial)
   }
 
-  const desabilitado = !sequencial.trim() || tipoServicoId === '' || enviando
+  const cancelada = osExistente?.status === 'CANCELADA'
+  const desabilitado = !sequencial.trim() || tipoServicoId === '' || enviando || cancelada
 
   // Resumo da última saída da OS existente
   const ultimaSaida =
@@ -263,6 +272,18 @@ export default function CadastrarOS() {
               >
                 OS já existente — re-despacho
               </Typography>
+              {cancelada && (
+                <Typography
+                  sx={{
+                    color: m3.error,
+                    fontWeight: 600,
+                    fontSize: 13,
+                    mb: 1,
+                  }}
+                >
+                  OS cancelada — não é possível adicionar nova saída.
+                </Typography>
+              )}
               <Box
                 sx={{
                   display: 'grid',
@@ -382,7 +403,7 @@ export default function CadastrarOS() {
             displayEmpty
             onChange={(e) => setEquipeId(e.target.value as number | '')}
           >
-            <MenuItem value="">— Nenhuma (ficará Pendente) —</MenuItem>
+            <MenuItem value="">— Nenhuma (sem saída em campo) —</MenuItem>
             {equipes.map((eq) => (
               <MenuItem key={eq.id} value={eq.id}>
                 {eq.nome}
@@ -390,7 +411,7 @@ export default function CadastrarOS() {
             ))}
           </Select>
           <FormHelperText sx={{ color: m3.onSurfaceVariant }}>
-            Sem equipe: OS fica Pendente; com equipe: já entra em Atendimento
+            Com equipe: já abre uma saída em campo. Sem equipe: OS aberta sem saída.
           </FormHelperText>
         </FormControl>
 
@@ -444,7 +465,7 @@ export default function CadastrarOS() {
           fullWidth
           size="large"
           disabled={desabilitado || carregando}
-          onClick={cadastrar}
+          onClick={() => cadastrar()}
           startIcon={enviando ? <CircularProgress size={18} color="inherit" /> : undefined}
           sx={{
             borderRadius: `${shape.full}px`,
