@@ -3,12 +3,9 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
-import MenuItem from '@mui/material/MenuItem'
+import Autocomplete from '@mui/material/Autocomplete'
 import Paper from '@mui/material/Paper'
 import CircularProgress from '@mui/material/CircularProgress'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Alert from '@mui/material/Alert'
@@ -316,27 +313,21 @@ export default function FolhasCasa() {
           helperText={`${descricao.length}/500`}
         />
 
-        {/* Quem recebeu */}
+        {/* Quem recebeu — pesquisável (só ADMIN) */}
         {usuario?.papel === 'ADMIN' ? (
-          <FormControl fullWidth disabled={enviando || carregandoUsuarios}>
-            <InputLabel id="recebido-por-label">Quem recebeu</InputLabel>
-            <Select
-              labelId="recebido-por-label"
-              label="Quem recebeu"
-              value={recebidoPorId}
-              displayEmpty
-              onChange={(e) => setRecebidoPorId(e.target.value as number | '')}
-            >
-              <MenuItem value="" disabled>
-                <em>Selecione quem recebeu</em>
-              </MenuItem>
-              {usuarios.map((u) => (
-                <MenuItem key={u.id} value={u.id}>
-                  {u.nome}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            options={usuarios}
+            getOptionLabel={(u) => u.nome}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            value={usuarios.find((u) => u.id === recebidoPorId) ?? null}
+            onChange={(_e, v) => setRecebidoPorId(v?.id ?? '')}
+            disabled={enviando || carregandoUsuarios}
+            fullWidth
+            noOptionsText="Nenhum usuário encontrado"
+            renderInput={(params) => (
+              <TextField {...params} label="Quem recebeu" placeholder="Selecione quem recebeu" />
+            )}
+          />
         ) : (
           <TextField
             label="Quem recebeu"
