@@ -29,6 +29,7 @@ import { useM3 } from '../theme/useM3'
 import { shape } from '../theme/tokens'
 import { api, ApiError } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { useAuth } from '../hooks/useAuth'
 import { formatarData } from '../lib/format'
 import type { TipoServico, NovoTipoServico, EditarTipoServico } from '../lib/types'
 
@@ -47,6 +48,8 @@ const formVazio: FormState = { nome: '', ativo: true }
 export default function TiposServico() {
   const { m3, elev } = useM3()
   const toast = useToast()
+  const { usuario } = useAuth()
+  const isAdmin = usuario?.papel === 'ADMIN'
 
   // Lista
   const [tipos, setTipos] = useState<TipoServico[]>([])
@@ -198,21 +201,23 @@ export default function TiposServico() {
           </Box>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={abrirCriar}
-          sx={{
-            borderRadius: `${shape.full}px`,
-            textTransform: 'none',
-            fontWeight: 500,
-            bgcolor: m3.primary,
-            color: m3.onPrimary,
-            '&:hover': { bgcolor: m3.primary, filter: 'brightness(1.08)' },
-          }}
-        >
-          Novo tipo
-        </Button>
+        {isAdmin && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={abrirCriar}
+            sx={{
+              borderRadius: `${shape.full}px`,
+              textTransform: 'none',
+              fontWeight: 500,
+              bgcolor: m3.primary,
+              color: m3.onPrimary,
+              '&:hover': { bgcolor: m3.primary, filter: 'brightness(1.08)' },
+            }}
+          >
+            Novo tipo
+          </Button>
+        )}
       </Box>
 
       {/* Tabela */}
@@ -293,26 +298,32 @@ export default function TiposServico() {
                       {formatarData(tipo.criadoEm)}
                     </TableCell>
                     <TableCell align="right" sx={{ pr: 1 }}>
-                      <Tooltip title="Editar tipo">
-                        <IconButton
-                          size="small"
-                          onClick={() => abrirEditar(tipo)}
-                          sx={{ color: m3.onSurfaceVariant, mr: 0.5 }}
-                          aria-label={`Editar tipo ${tipo.nome}`}
-                        >
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Excluir tipo">
-                        <IconButton
-                          size="small"
-                          onClick={() => abrirConfirmarExclusao(tipo)}
-                          sx={{ color: m3.error }}
-                          aria-label={`Excluir tipo ${tipo.nome}`}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {isAdmin ? (
+                        <>
+                          <Tooltip title="Editar tipo">
+                            <IconButton
+                              size="small"
+                              onClick={() => abrirEditar(tipo)}
+                              sx={{ color: m3.onSurfaceVariant, mr: 0.5 }}
+                              aria-label={`Editar tipo ${tipo.nome}`}
+                            >
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Excluir tipo">
+                            <IconButton
+                              size="small"
+                              onClick={() => abrirConfirmarExclusao(tipo)}
+                              sx={{ color: m3.error }}
+                              aria-label={`Excluir tipo ${tipo.nome}`}
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <Typography sx={{ color: m3.outlineVariant, fontSize: 13 }}>—</Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

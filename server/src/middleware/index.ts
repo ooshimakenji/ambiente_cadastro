@@ -1,5 +1,5 @@
 // Barrel do módulo de middlewares.
-export { requireAuth, requireAdmin } from './auth.js'
+export { requireAuth, requireAdmin, requirePermissao, permissoesDoUsuario } from './auth.js'
 export { errorHandler, notFoundHandler } from './errorHandler.js'
 export {
   HttpError,

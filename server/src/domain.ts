@@ -30,8 +30,28 @@ export type Fotos = (typeof FOTOS)[number]
 export const PERIODO = ['MANHA', 'TARDE'] as const
 export type Periodo = (typeof PERIODO)[number]
 
-export const PAPEIS = ['ADMIN', 'SUPERVISOR'] as const
+export const PAPEIS = ['ADMIN', 'SUPERVISOR', 'CAMPO'] as const
 export type Papel = (typeof PAPEIS)[number]
+
+// Telas controláveis por permissão (papel × tela). ADMIN vê todas (bypass);
+// `usuarios` e `permissoes` são sempre ADMIN-only e ficam fora desta lista.
+export const TELAS = [
+  'cadastrar',
+  'receber',
+  'folhas',
+  'ordens',
+  'equipes',
+  'tipos',
+  'historico',
+] as const
+export type Tela = (typeof TELAS)[number]
+
+// Normaliza um papel vindo do banco (String) para o union tipado.
+// Fallback seguro = SUPERVISOR (papel mais restritivo entre os "operacionais"
+// que ainda enxerga o conjunto padrão; nunca eleva a ADMIN).
+export function normalizarPapel(p: string): Papel {
+  return (PAPEIS as readonly string[]).includes(p) ? (p as Papel) : 'SUPERVISOR'
+}
 
 export const ENTIDADES_AUDITORIA = [
   'OS',
@@ -40,6 +60,7 @@ export const ENTIDADES_AUDITORIA = [
   'USUARIO',
   'EQUIPE',
   'TIPO_SERVICO',
+  'PERMISSAO',
 ] as const
 export type EntidadeAuditoria = (typeof ENTIDADES_AUDITORIA)[number]
 

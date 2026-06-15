@@ -17,6 +17,7 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { registrarEvento } from '../audit/index.js'
 import { erro400, erro404, erro409 } from '../middleware/httpError.js'
+import { requirePermissao } from '../middleware/auth.js'
 import { STATUS_OS } from '../domain.js'
 import {
   includeExpandida,
@@ -115,7 +116,7 @@ ordensRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
 // ---------- POST /ordens (cadastrar / re-despachar) ----------
 // Sequencial NOVO  → cria OrdemServico (ABERTA) + (se houver equipe) 1ª Saida EM_CAMPO.
 // Sequencial EXISTE → cria NOVA Saida (re-despacho). NÃO retorna 409.
-ordensRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+ordensRouter.post('/', requirePermissao('cadastrar'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dados = novaOrdemSchema.parse(req.body)
     const autorId = req.usuario!.id
@@ -221,7 +222,7 @@ ordensRouter.post('/', async (req: Request, res: Response, next: NextFunction) =
 // Cria uma saída tipo=FOTO (EM_CAMPO) p/ regularizar foto de OS concluída-sem-foto.
 // A regularização se concretiza no recebimento dessa saída (PATCH /saidas/:id/receber
 // com fotos=COM_FOTOS), que marca a saída CAMPO concluída SEM_FOTOS como COM_FOTOS.
-ordensRouter.post('/:id/saida-foto', async (req: Request, res: Response, next: NextFunction) => {
+ordensRouter.post('/:id/saida-foto', requirePermissao('receber'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Number(req.params.id)
     if (!Number.isInteger(id) || id <= 0) throw erro400('ID inválido')

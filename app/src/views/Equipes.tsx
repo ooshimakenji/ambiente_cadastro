@@ -29,6 +29,7 @@ import { useM3 } from '../theme/useM3'
 import { shape } from '../theme/tokens'
 import { api, ApiError } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { useAuth } from '../hooks/useAuth'
 import { formatarData } from '../lib/format'
 import type { Equipe, NovaEquipe, EditarEquipe } from '../lib/types'
 
@@ -48,6 +49,8 @@ const formVazio: FormState = { nome: '', descricao: '', ativo: true }
 export default function Equipes() {
   const { m3, elev } = useM3()
   const toast = useToast()
+  const { usuario } = useAuth()
+  const isAdmin = usuario?.papel === 'ADMIN'
 
   // Lista
   const [equipes, setEquipes] = useState<Equipe[]>([])
@@ -201,21 +204,23 @@ export default function Equipes() {
           </Box>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={abrirCriar}
-          sx={{
-            borderRadius: `${shape.full}px`,
-            textTransform: 'none',
-            fontWeight: 500,
-            bgcolor: m3.primary,
-            color: m3.onPrimary,
-            '&:hover': { bgcolor: m3.primary, filter: 'brightness(1.08)' },
-          }}
-        >
-          Nova equipe
-        </Button>
+        {isAdmin && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={abrirCriar}
+            sx={{
+              borderRadius: `${shape.full}px`,
+              textTransform: 'none',
+              fontWeight: 500,
+              bgcolor: m3.primary,
+              color: m3.onPrimary,
+              '&:hover': { bgcolor: m3.primary, filter: 'brightness(1.08)' },
+            }}
+          >
+            Nova equipe
+          </Button>
+        )}
       </Box>
 
       {/* Tabela */}
@@ -305,26 +310,32 @@ export default function Equipes() {
                       {formatarData(equipe.criadoEm)}
                     </TableCell>
                     <TableCell align="right" sx={{ pr: 1 }}>
-                      <Tooltip title="Editar equipe">
-                        <IconButton
-                          size="small"
-                          onClick={() => abrirEditar(equipe)}
-                          sx={{ color: m3.onSurfaceVariant, mr: 0.5 }}
-                          aria-label={`Editar equipe ${equipe.nome}`}
-                        >
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Excluir equipe">
-                        <IconButton
-                          size="small"
-                          onClick={() => abrirConfirmarExclusao(equipe)}
-                          sx={{ color: m3.error }}
-                          aria-label={`Excluir equipe ${equipe.nome}`}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {isAdmin ? (
+                        <>
+                          <Tooltip title="Editar equipe">
+                            <IconButton
+                              size="small"
+                              onClick={() => abrirEditar(equipe)}
+                              sx={{ color: m3.onSurfaceVariant, mr: 0.5 }}
+                              aria-label={`Editar equipe ${equipe.nome}`}
+                            >
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Excluir equipe">
+                            <IconButton
+                              size="small"
+                              onClick={() => abrirConfirmarExclusao(equipe)}
+                              sx={{ color: m3.error }}
+                              aria-label={`Excluir equipe ${equipe.nome}`}
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <Typography sx={{ color: m3.outlineVariant, fontSize: 13 }}>—</Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

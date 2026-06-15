@@ -29,18 +29,11 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined'
 
 import { api, ApiError } from '../lib/api'
-import { PAPEIS, type Equipe, type NovoUsuario, type EditarUsuario, type UsuarioComEquipe } from '../lib/types'
+import { PAPEIS, PAPEL_LABELS, type Papel, type Equipe, type NovoUsuario, type EditarUsuario, type UsuarioComEquipe } from '../lib/types'
 import { formatarData } from '../lib/format'
 import { useM3 } from '../theme/useM3'
 import { shape } from '../theme/tokens'
 import { useToast } from '../components/Toast'
-
-// ---------- helpers ----------
-
-const PAPEL_LABELS: Record<string, string> = {
-  ADMIN: 'Administrador',
-  SUPERVISOR: 'Supervisor',
-}
 
 // ---------- estado inicial dos formulários ----------
 
@@ -48,7 +41,7 @@ interface FormCriar {
   nome: string
   login: string
   senha: string
-  papel: 'ADMIN' | 'SUPERVISOR'
+  papel: Papel
   equipeId: string // '' = sem equipe
 }
 
@@ -56,7 +49,7 @@ interface FormEditar {
   nome: string
   login: string
   senha: string // opcional — só envia se preenchido
-  papel: 'ADMIN' | 'SUPERVISOR'
+  papel: Papel
   equipeId: string // '' = sem equipe
   ativo: boolean
 }
@@ -443,7 +436,7 @@ export default function Usuarios() {
             select
             label="Papel *"
             value={formCriar.papel}
-            onChange={(e) => setFormCriar((f) => ({ ...f, papel: e.target.value as 'ADMIN' | 'SUPERVISOR' }))}
+            onChange={(e) => setFormCriar((f) => ({ ...f, papel: e.target.value as Papel }))}
             fullWidth
             size="small"
             disabled={salvandoCriar}
@@ -551,7 +544,7 @@ export default function Usuarios() {
             select
             label="Papel"
             value={formEditar.papel}
-            onChange={(e) => setFormEditar((f) => ({ ...f, papel: e.target.value as 'ADMIN' | 'SUPERVISOR' }))}
+            onChange={(e) => setFormEditar((f) => ({ ...f, papel: e.target.value as Papel }))}
             fullWidth
             size="small"
             disabled={salvandoEditar}

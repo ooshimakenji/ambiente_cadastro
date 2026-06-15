@@ -5,7 +5,7 @@
 // =====================================================================
 
 // Papéis espelham PAPEIS de app/src/lib/types.ts (monorepo: sem import cruzado).
-type Papel = 'ADMIN' | 'SUPERVISOR'
+type Papel = 'ADMIN' | 'SUPERVISOR' | 'CAMPO'
 
 export interface UsuarioAutenticado {
   id: number

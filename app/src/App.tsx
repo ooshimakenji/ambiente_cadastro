@@ -16,17 +16,31 @@ import Equipes from './views/Equipes'
 import Usuarios from './views/Usuarios'
 import TiposServico from './views/TiposServico'
 import Historico from './views/Historico'
+import Permissoes from './views/Permissoes'
+import type { Tela } from './lib/types'
 
 // =====================================================================
 // Tipo de navegação — espelha o NavView do AppShell
 // =====================================================================
-type NavView = 'cadastrar' | 'receber' | 'folhas' | 'ordens' | 'equipes' | 'usuarios' | 'tipos' | 'historico'
+type NavView =
+  | 'cadastrar'
+  | 'receber'
+  | 'folhas'
+  | 'ordens'
+  | 'equipes'
+  | 'usuarios'
+  | 'tipos'
+  | 'historico'
+  | 'permissoes'
+
+// Views só de ADMIN (fora da matriz de permissões por tela).
+const VIEWS_ADMIN: NavView[] = ['usuarios', 'permissoes']
 
 // =====================================================================
 // Conteúdo interno — consome useAuth() e controla navegação
 // =====================================================================
 function AppContent() {
-  const { usuario, carregando, logout } = useAuth()
+  const { usuario, permissoes, carregando, logout } = useAuth()
   const [view, setView] = useState<NavView>('cadastrar')
 
   // Auto-logout por inatividade (alinhado à expiração do JWT ~15 min)
@@ -54,17 +68,23 @@ function AppContent() {
     return <Login />
   }
 
-  // Proteção de rota: ADMIN-only → fallback para cadastrar
-  const viewEfetiva: NavView =
-    view === 'usuarios' && usuario.papel !== 'ADMIN' ? 'cadastrar' : view
+  // RBAC: pode acessar a view? ADMIN tudo; views admin-only = só ADMIN;
+  // demais views são gated pela matriz de permissões (telas).
+  const podeAcessar = (v: NavView): boolean => {
+    if (usuario.papel === 'ADMIN') return true
+    if (VIEWS_ADMIN.includes(v)) return false
+    return permissoes.includes(v as Tela)
+  }
+
+  // Fallback = 1ª view que o usuário pode acessar (cadastrar se possível).
+  const fallbackView: NavView = podeAcessar('cadastrar')
+    ? 'cadastrar'
+    : (permissoes[0] as NavView | undefined) ?? 'cadastrar'
+
+  const viewEfetiva: NavView = podeAcessar(view) ? view : fallbackView
 
   const handleNavigate = (proxima: NavView) => {
-    // Proteção de navegação: se a view destino for restrita, redireciona
-    if (proxima === 'usuarios' && usuario.papel !== 'ADMIN') {
-      setView('cadastrar')
-      return
-    }
-    setView(proxima)
+    setView(podeAcessar(proxima) ? proxima : fallbackView)
   }
 
   // Mapeamento view → componente
@@ -86,6 +106,8 @@ function AppContent() {
         return <TiposServico />
       case 'historico':
         return <Historico />
+      case 'permissoes':
+        return <Permissoes />
       default:
         return <CadastrarOS />
     }
@@ -96,6 +118,7 @@ function AppContent() {
       view={viewEfetiva}
       onNavigate={handleNavigate}
       usuario={usuario}
+      permissoes={permissoes}
       onLogout={logout}
     >
       {renderView()}

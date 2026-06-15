@@ -34,8 +34,37 @@ export type Fotos = (typeof FOTOS)[number]
 export const PERIODO = ['MANHA', 'TARDE'] as const
 export type Periodo = (typeof PERIODO)[number]
 
-export const PAPEIS = ['ADMIN', 'SUPERVISOR'] as const
+export const PAPEIS = ['ADMIN', 'SUPERVISOR', 'CAMPO'] as const
 export type Papel = (typeof PAPEIS)[number]
+
+export const PAPEL_LABELS: Record<Papel, string> = {
+  ADMIN: 'Administrador',
+  SUPERVISOR: 'Supervisor',
+  CAMPO: 'Campo',
+}
+
+// Telas controláveis por permissão (espelha TELAS de server/src/domain.ts).
+// `usuarios` e `permissoes` são sempre ADMIN-only e ficam fora desta lista.
+export const TELAS = [
+  'cadastrar',
+  'receber',
+  'folhas',
+  'ordens',
+  'equipes',
+  'tipos',
+  'historico',
+] as const
+export type Tela = (typeof TELAS)[number]
+
+export const TELA_LABELS: Record<Tela, string> = {
+  cadastrar: 'Cadastrar OS',
+  receber: 'Receber OS',
+  folhas: 'Folhas à Casa',
+  ordens: 'Ordens de Serviço',
+  equipes: 'Equipes',
+  tipos: 'Tipos de serviço',
+  historico: 'Histórico',
+}
 
 export const ENTIDADES_AUDITORIA = [
   'OS',
@@ -44,6 +73,7 @@ export const ENTIDADES_AUDITORIA = [
   'USUARIO',
   'EQUIPE',
   'TIPO_SERVICO',
+  'PERMISSAO',
 ] as const
 export type EntidadeAuditoria = (typeof ENTIDADES_AUDITORIA)[number]
 
@@ -164,6 +194,14 @@ export interface LoginRequest {
 export interface LoginResponse {
   token: string
   usuario: Usuario
+  permissoes: Tela[]
+}
+
+// Permissões por papel (matriz da tela de Permissões).
+export interface PermissaoPapel {
+  papel: Papel
+  tela: Tela
+  permitido: boolean
 }
 
 // ---------- Request bodies (criação/edição) ----------

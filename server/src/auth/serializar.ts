@@ -5,6 +5,7 @@
 // =====================================================================
 import type { Usuario as UsuarioPrisma } from '@prisma/client'
 import type { Papel } from './jwt.js'
+import { normalizarPapel } from '../domain.js'
 
 export interface UsuarioPublico {
   id: number
@@ -21,7 +22,7 @@ export function serializarUsuario(u: UsuarioPrisma): UsuarioPublico {
     id: u.id,
     nome: u.nome,
     login: u.login,
-    papel: (u.papel === 'ADMIN' ? 'ADMIN' : 'SUPERVISOR') as Papel,
+    papel: normalizarPapel(u.papel) as Papel,
     ativo: u.ativo,
     equipeId: u.equipeId,
     criadoEm: u.criadoEm.toISOString(),

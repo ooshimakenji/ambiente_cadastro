@@ -15,7 +15,7 @@ import { registrarEvento } from '../audit/index.js'
 import { verificarSenha } from './senha.js'
 import { gerarToken } from './jwt.js'
 import { serializarUsuario } from './serializar.js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, permissoesDoUsuario } from '../middleware/auth.js'
 import { erro401 } from '../middleware/httpError.js'
 
 const loginSchema = z.object({
@@ -60,8 +60,9 @@ authRouter.post('/login', async (req: Request, res: Response, next: NextFunction
       nome: usuarioPublico.nome,
       papel: usuarioPublico.papel,
     })
+    const permissoes = await permissoesDoUsuario(usuarioPublico.papel)
 
-    res.json({ token, usuario: usuarioPublico })
+    res.json({ token, usuario: usuarioPublico, permissoes })
   } catch (e) {
     next(e)
   }
@@ -96,7 +97,9 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response, next: Nex
     if (!usuario || !usuario.ativo) {
       throw erro401('Usuário não encontrado ou inativo')
     }
-    res.json(serializarUsuario(usuario))
+    const usuarioPublico = serializarUsuario(usuario)
+    const permissoes = await permissoesDoUsuario(usuarioPublico.papel)
+    res.json({ usuario: usuarioPublico, permissoes })
   } catch (e) {
     next(e)
   }

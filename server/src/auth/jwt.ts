@@ -8,7 +8,7 @@
 import jwt from 'jsonwebtoken'
 import type { SignOptions } from 'jsonwebtoken'
 
-export type Papel = 'ADMIN' | 'SUPERVISOR'
+export type Papel = 'ADMIN' | 'SUPERVISOR' | 'CAMPO'
 
 // Payload do token (não inclui dados sensíveis como senhaHash).
 export interface TokenPayload {
@@ -50,7 +50,7 @@ export function verificarToken(token: string): TokenPayload | null {
       typeof id === 'number' &&
       typeof login === 'string' &&
       typeof nome === 'string' &&
-      (papel === 'ADMIN' || papel === 'SUPERVISOR')
+      (papel === 'ADMIN' || papel === 'SUPERVISOR' || papel === 'CAMPO')
     ) {
       return { id, login, nome, papel }
     }

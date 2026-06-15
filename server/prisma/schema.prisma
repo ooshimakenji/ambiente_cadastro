@@ -30,7 +30,7 @@ model Usuario {
   nome      String
   login     String   @unique
   senhaHash String
-  papel     String   @default("SUPERVISOR") // ADMIN | SUPERVISOR
+  papel     String   @default("SUPERVISOR") // ADMIN | SUPERVISOR | CAMPO
   ativo     Boolean  @default(true)
   equipeId  Int?
   equipe    Equipe?  @relation(fields: [equipeId], references: [id])
@@ -131,6 +131,19 @@ model FolhaEnvio {
   criadoEm      DateTime @default(now())
 
   @@index([ordemId])
+}
+
+// Permissões por papel (configuráveis pelo ADMIN na tela "Permissões").
+// ADMIN não é armazenado aqui — sempre tem acesso total (bypass no código).
+// `tela` espelha as TELAS de domain.ts (cadastrar, receber, folhas, ordens,
+// equipes, tipos, historico). Linha = (papel, tela) com permitido true/false.
+model PermissaoPapel {
+  id        Int     @id @default(autoincrement())
+  papel     String // SUPERVISOR | CAMPO (ADMIN não entra)
+  tela      String // chave de tela (TELAS em domain.ts)
+  permitido Boolean @default(false)
+
+  @@unique([papel, tela])
 }
 
 model EventoAuditoria {

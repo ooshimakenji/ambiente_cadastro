@@ -25,6 +25,7 @@ const LABEL_ENTIDADE: Record<EntidadeAuditoria, string> = {
   USUARIO: 'Usuário',
   EQUIPE: 'Equipe',
   TIPO_SERVICO: 'Tipo de serviço',
+  PERMISSAO: 'Permissão',
 }
 
 const LABEL_ACAO: Record<AcaoAuditoria, string> = {

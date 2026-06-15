@@ -68,6 +68,7 @@ function descricaoPadrao(
     USUARIO: 'Usuário',
     EQUIPE: 'Equipe',
     TIPO_SERVICO: 'Tipo de serviço',
+    PERMISSAO: 'Permissão',
   }
   const rotuloAcao: Record<AcaoAuditoria, string> = {
     CRIACAO: 'criado(a)',

@@ -9,8 +9,14 @@
 // =====================================================================
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { TELAS } from '../src/domain.js'
 
 const prisma = new PrismaClient()
+
+// Permissões default por papel (ADMIN tem tudo, fora da matriz).
+// SUPERVISOR: vê todas as telas (edição de cadastros/usuários segue ADMIN-only no backend).
+// CAMPO: só Cadastrar + Receber.
+const TELAS_CAMPO = ['cadastrar', 'receber'] as const
 
 // Tipos de serviço pré-setados (planilha "SERVIÇOS IMEDIATOS" → aba Apoio).
 const TIPOS_SERVICO = [
@@ -42,9 +48,11 @@ async function main() {
 
   const senhaHash = await bcrypt.hash(ADMIN_SENHA, 10)
 
+  // Atualiza também a senha (senhaHash) p/ manter o admin bootstrap em sincronia
+  // com ADMIN_SENHA do .env — garante login previsível após cada seed.
   const admin = await prisma.usuario.upsert({
     where: { login: ADMIN_LOGIN },
-    update: { nome: ADMIN_NOME, papel: 'ADMIN', ativo: true },
+    update: { nome: ADMIN_NOME, papel: 'ADMIN', ativo: true, senhaHash },
     create: { nome: ADMIN_NOME, login: ADMIN_LOGIN, senhaHash, papel: 'ADMIN', ativo: true },
   })
   console.log(`ADMIN pronto: #${admin.id} (${admin.login})`)
@@ -80,6 +88,26 @@ async function main() {
   })
   console.log(`Supervisor pronto: #${supervisor.id} (${supervisor.login})`)
 
+  const campo = await prisma.usuario.upsert({
+    where: { login: 'campo' },
+    update: { nome: 'Operador de Campo', papel: 'CAMPO', ativo: true },
+    create: {
+      nome: 'Operador de Campo',
+      login: 'campo',
+      senhaHash: await bcrypt.hash('campo123', 10),
+      papel: 'CAMPO',
+      ativo: true,
+    },
+  })
+  console.log(`Campo pronto: #${campo.id} (${campo.login})`)
+
+  // Matriz de permissões default (upsert idempotente por [papel, tela]).
+  for (const tela of TELAS) {
+    await upsertPermissao('SUPERVISOR', tela, true)
+    await upsertPermissao('CAMPO', tela, (TELAS_CAMPO as readonly string[]).includes(tela))
+  }
+  console.log(`Permissões default: SUPERVISOR (todas) + CAMPO (cadastrar, receber).`)
+
   const totalOS = await prisma.ordemServico.count()
   console.log(`OS no banco: ${totalOS} (seed não cria OS — entram pela operação).`)
   console.log('Seed concluído.')
@@ -91,6 +119,14 @@ async function upsertEquipePorNome(nome: string, descricao: string) {
     return prisma.equipe.update({ where: { id: existente.id }, data: { descricao, ativo: true } })
   }
   return prisma.equipe.create({ data: { nome, descricao, ativo: true } })
+}
+
+async function upsertPermissao(papel: string, tela: string, permitido: boolean) {
+  return prisma.permissaoPapel.upsert({
+    where: { papel_tela: { papel, tela } },
+    update: { permitido },
+    create: { papel, tela, permitido },
+  })
 }
 
 async function upsertTipoPorNome(nome: string) {
