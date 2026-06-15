@@ -44,7 +44,14 @@ Evoluir o `ambiental_cadastro` do modelo linear (1 OS = 1 registro, `sequencial 
   - "Admin não cai por inatividade": verificado por código (`useAutoLogout(…, isAdmin)` + `App.tsx` passa o param).
   - Builds app+server **verdes** após as correções.
 - Git: branch `main`. Commits v3: `a284595` (Fase A) + `fc9daf4` (Fase B) + commit da Fase C (este). Sem push.
-- ⏭️ **PRÓXIMO (fora desta leva):** Parte 5 — integração data.json (publicador + validação local). Notas futuras abaixo.
+- ✅ **PARTE 5 — VALIDAÇÃO LOCAL (Opção 1) IMPLEMENTADA** (2026-06-15). `server/scripts/publicador.ts`
+  (login→`GET /integracao/servicos`→`server/out/data.json`, sem push) + `validarIntegracao.ts` (zod vs
+  contrato da SPA + diff vs `dashboard_servicos/data.json`). Scripts: `npm run integracao:{publicar,validar,local}`.
+  `exportServicos.ts` agora emite `metricas` por `status_campo` (fiel ao data.json de produção). Rodado:
+  schema OK, só avisos esperados (endereço/bairro vazios = gap conhecido). **Push/staging/cutover/endereço
+  seguem ADIADOS** (ver INTEGRACAO.md §7). Builds verdes.
+- ⏭️ **PRÓXIMO (fora desta leva):** ligar a integração de verdade — revogar token OAuth exposto, definir origem
+  de endereço/coordenadas, trocar writeFile por push GitHub e desligar o watch de Excel do auto_sync.py.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## CONTRATO v3 (settado na Fase A — fonte para a Fase B)

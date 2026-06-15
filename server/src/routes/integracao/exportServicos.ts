@@ -111,13 +111,21 @@ integracaoRouter.get('/servicos', async (_req: Request, res: Response, next: Nex
       include: includeRelacoes,
     })
 
+    // Métricas por status_campo (espelha o data.json de produção do dashboard_servicos):
+    // as ABERTAS são tabuladas pelo status_campo derivado das saídas; concluida/cancelada
+    // vêm do COUNT por status da OS (evita carregar todo o histórico de saídas).
     const totalPorStatus = await prisma.ordemServico.groupBy({
       by: ['status'],
       _count: { _all: true },
     })
     const metricas: Record<string, number> = {}
+    for (const os of ativas) {
+      const sc = derivarStatusCampo(os)
+      metricas[sc] = (metricas[sc] ?? 0) + 1
+    }
     for (const item of totalPorStatus) {
-      metricas[item.status] = item._count._all
+      if (item.status === 'CONCLUIDA') metricas.concluida = item._count._all
+      else if (item.status === 'CANCELADA') metricas.cancelada = item._count._all
     }
 
     res.json({

@@ -9,7 +9,10 @@
     "start": "node --env-file=.env dist/index.js",
     "seed": "tsx --env-file=.env prisma/seed.ts",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "integracao:publicar": "tsx --env-file=.env scripts/publicador.ts",
+    "integracao:validar": "tsx --env-file=.env scripts/validarIntegracao.ts",
+    "integracao:local": "npm run integracao:publicar && npm run integracao:validar"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

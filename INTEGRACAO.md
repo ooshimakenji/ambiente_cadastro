@@ -1,8 +1,9 @@
 # Integração `ambiental_cadastro` → `dashboard_servicos`
 
-> Status: **ADIADA** (decisão do usuário em 2026-06-14). Este documento descreve o pipeline real,
-> a ponte que já existe no backend e o caminho recomendado para ligar a integração quando for a hora.
-> **Nenhum código de integração é implementado agora** — apenas instruções.
+> Status: **VALIDAÇÃO LOCAL IMPLEMENTADA (Opção 1)** em 2026-06-15. O publicador local + validador
+> existem e rodam (ver §7). **Push à produção, staging, cutover e enriquecimento de endereço seguem
+> ADIADOS** (decisão do usuário). Este documento descreve o pipeline real, a ponte no backend e o
+> caminho para ligar a integração de verdade quando for a hora.
 
 ## 1. Como o `data.json` é produzido HOJE (pipeline real)
 
@@ -109,3 +110,25 @@ O remote git do repo `dashboard_servicos` tem um **token OAuth do GitHub embutid
 - [ ] Desligar o watch de Excel do `auto_sync.py` (evitar dupla fonte).
 - [ ] Validar: commit `data: …` aparece no `dashboard_servicos`; deploy.yml roda; SPA reflete em ≤30s.
 - [ ] Conferir o mapeamento de `status_campo` (tabela acima) com o que a SPA do `dashboard_servicos` espera.
+
+## 7. Publicador + validação LOCAL (Opção 1 — IMPLEMENTADO)
+
+Implementado em `server/scripts/` (Node/TS via `tsx`), sem nenhum acesso ao GitHub:
+
+| Script | npm | O que faz |
+|--------|-----|-----------|
+| `publicador.ts` | `npm run integracao:publicar` | Login no cadastro → `GET /integracao/servicos` → escreve `server/out/data.json` (gitignored). **Sem push.** |
+| `validarIntegracao.ts` | `npm run integracao:validar` | Valida o `data.json` gerado contra o contrato da SPA (zod) + diff estrutural vs `dashboard_servicos/data.json`. |
+| — | `npm run integracao:local` | Encadeia os dois (publicar + validar). |
+
+Config por env (`.env`): `PORT`, `ADMIN_LOGIN`, `ADMIN_SENHA`; opcionais `INTEGRACAO_API`,
+`INTEGRACAO_OUT`, `INTEGRACAO_PROD` (caminho do data.json de produção p/ o diff).
+
+**Pré-requisito:** API no ar (`npm run dev`). O validador retorna exit 1 só em violação dura de schema;
+gaps documentados (endereço/bairro vazios, `maquina`/`data_inicio_atendimento` ausentes, sem `lat`/`lon`)
+são **avisos**, não erros. **Métricas** agora são contadas por `status_campo` (espelham o data.json real;
+ver `exportServicos.ts`).
+
+**O que falta para ligar de verdade (adiado):** revogar/regerar o token OAuth exposto (§5), definir a
+origem de endereço/coordenadas (§4), e trocar o `writeFileSync` por um `push` via API do GitHub no
+`dashboard_servicos` (§3) — desligando o watch de Excel do `auto_sync.py`.
