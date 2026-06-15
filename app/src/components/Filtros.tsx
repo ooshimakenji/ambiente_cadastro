@@ -20,6 +20,8 @@ import {
 // Labels legíveis para entidades e ações
 const LABEL_ENTIDADE: Record<EntidadeAuditoria, string> = {
   OS: 'Ordem de Serviço',
+  SAIDA: 'Saída',
+  FOLHA_ENVIO: 'Folha enviada',
   USUARIO: 'Usuário',
   EQUIPE: 'Equipe',
   TIPO_SERVICO: 'Tipo de serviço',

@@ -19,15 +19,21 @@ Evoluir o `ambiental_cadastro` do modelo linear (1 OS = 1 registro, `sequencial 
 
 - ✅ **FASE A CONCLUÍDA e COMMITADA** — commit `a284595` ("feat(v3): modelo OS->N saídas + backend (Fase A)").
   Migração `20260615070620_v3_os_multi_saida` aplicada; seed verde (4 cenários); **`tsc` do server VERDE**.
-- ⏳ **FASE B NÃO INICIADA** (os 3 agentes de frontend foram cancelados antes de rodar).
-  ⚠️ **O build do FRONT está QUEBRADO agora**: as views (`OrdensServico.tsx`, `CadastrarOS.tsx`, `ReceberOS.tsx`)
-  ainda consomem o modelo ANTIGO e importam DTOs removidos (`EditarOrdem`, `MudarStatusOrdem`, `DashboardResumo`).
-  Isso é esperado — a Fase B reescreve essas views.
-- ⏳ **FASE C** (review + verify) pendente.
-- **Próximo passo exato:** executar a **FASE B** conforme a especificação abaixo (3 unidades de trabalho, arquivos
-  disjuntos). Pode ser inline ou com agentes (fan-out ≤3). Depois commitar e seguir p/ Fase C.
-- Git: branch `main`. Commits v3: `a284595` (Fase A). HANDOFF anterior em `d8de867`.
-  (Esta atualização do HANDOFF pode estar **não commitada** — commitar ao retomar.)
+- ✅ **FASE B CONCLUÍDA** — frontend alinhado ao contrato v3. Builds **VERDES**: `app/npm run build` e
+  `server/npm run build`. Zero referências ao modelo antigo (`FotosOS`/`EditarOrdem`/`MudarStatusOrdem`/
+  `PENDENTE`/`ATENDENDO`/`/ordens/:id/receber`/`/ordens/:id/status`).
+  - Unidade 1 (telas de bipagem): `CadastrarOS.tsx` (re-despacho: bipa→GET /ordens?sequencial→resumo+"Cadastrar nova
+    saída"; removido tratamento de 409; MUI Select corrigido), `ReceberOS.tsx` (reescrita: abas Receber [desfecho→
+    fotos→descrição via PATCH /saidas/:id/receber] e Aguardando fotos [saida-foto+receber COM_FOTOS]),
+    `FolhasCasa.tsx` (nova: bipagem + lista; aviso "só rastro").
+  - Unidade 2: `OrdensServico.tsx` reescrita read-mostly (tabela v3 + Drawer com timeline de saídas + auditoria via
+    GET /ordens/:id; sem criar/editar/excluir).
+  - Unidade 3: `App.tsx` passa `isAdmin` ao `useAutoLogout`; `package.json` app/server renomeados; `main.tsx` OK.
+  - Fix extra (não previsto): `app/src/components/Filtros.tsx` — `LABEL_ENTIDADE` ganhou `SAIDA`/`FOLHA_ENVIO`.
+  - **NOTA**: o scaffolding de `App.tsx`/`AppShell.tsx` (nav `folhas`) e o param `isAdmin` em `useAutoLogout.ts` já
+    existiam antes da Fase B (criados junto do contrato); a Fase B só completou o que faltava.
+- ⏳ **FASE C** (review adversarial Opus + verify E2E HTTP) — PRÓXIMO PASSO.
+- Git: branch `main`. Commits v3: `a284595` (Fase A) + commit da Fase B (este). HANDOFF anterior em `d8de867`.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## CONTRATO v3 (settado na Fase A — fonte para a Fase B)
@@ -85,7 +91,7 @@ Typecheck: `cd app && npm run build` (NÃO `tsc --noEmit`).
 
 ## Checklist
 ### Fase A — [x] CONCLUÍDA (commit a284595)
-### Fase B — [ ] Unidade 1 (bipagem) · [ ] Unidade 2 (OrdensServico) · [ ] Unidade 3 (nav/logout/cosmético) · [ ] build app verde · [ ] commit
+### Fase B — [x] Unidade 1 (bipagem) · [x] Unidade 2 (OrdensServico) · [x] Unidade 3 (nav/logout/cosmético) · [x] build app verde · [x] commit
 ### Fase C — [ ] review · [ ] verify E2E · [ ] HANDOFF final + commit
 
 ## Como retomar (comandos)

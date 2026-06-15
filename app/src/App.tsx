@@ -30,7 +30,7 @@ function AppContent() {
   const [view, setView] = useState<NavView>('cadastrar')
 
   // Auto-logout por inatividade (alinhado à expiração do JWT ~15 min)
-  useAutoLogout(15 * 60 * 1000, logout)
+  useAutoLogout(15 * 60 * 1000, logout, usuario?.papel === 'ADMIN')
 
   // Spinner enquanto rehidrata sessão
   if (carregando) {
