@@ -1,5 +1,5 @@
 // =====================================================================
-// schema.prisma — dashboard_cadastro
+// schema.prisma — ambiental_cadastro
 // Provider SQLite nesta v1. Para migrar a PostgreSQL depois:
 //   1. provider = "postgresql"
 //   2. DATABASE_URL apontando p/ o Postgres da rede interna (.env)

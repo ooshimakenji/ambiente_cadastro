@@ -1,5 +1,5 @@
 // =====================================================================
-// Seed idempotente — dashboard_cadastro.
+// Seed idempotente — ambiental_cadastro.
 // Cria o ADMIN a partir do .env (ADMIN_LOGIN/SENHA/NOME) via upsert,
 // 1-2 equipes e algumas OS de exemplo para validar a UI na Fase 4.
 // Rodar: npm run seed  (carrega .env via --env-file e usa tsx).

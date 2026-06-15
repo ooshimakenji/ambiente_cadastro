@@ -1,5 +1,5 @@
 // =====================================================================
-// CONTRATO DE TIPOS — dashboard_cadastro
+// CONTRATO DE TIPOS — ambiental_cadastro
 // Fonte da verdade do domínio + DTOs da API. O frontend importa daqui;
 // o backend (server/) espelha estes tipos (monorepo com builds separados).
 // Mantém compatibilidade futura com dashboard_servicos (ver statusMap.ts).

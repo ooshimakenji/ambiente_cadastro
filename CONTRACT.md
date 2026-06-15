@@ -1,4 +1,4 @@
-# Contrato da API — `dashboard_cadastro`
+# Contrato da API — `ambiental_cadastro`
 
 Fonte da verdade para as fases de Backend (2) e Frontend (4). Tipos TypeScript canônicos em
 `app/src/lib/types.ts` (domínio + DTOs) e `app/src/lib/statusMap.ts` (integração). O backend **espelha**

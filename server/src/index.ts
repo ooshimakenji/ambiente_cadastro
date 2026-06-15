@@ -1,5 +1,5 @@
 // =====================================================================
-// Bootstrap Express — dashboard_cadastro server.
+// Bootstrap Express — ambiental_cadastro server.
 // Fase 3 (este arquivo): routers CRUD + integração montados.
 // As variáveis de ambiente vêm do .env, carregado via `node --env-file`
 // (configurado nos scripts dev/start/seed do package.json — sem dependência

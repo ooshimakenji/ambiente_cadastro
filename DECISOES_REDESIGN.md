@@ -1,4 +1,4 @@
-# Decisões finais — Redesenho do fluxo de cadastro/recebimento (`dashboard_cadastro`)
+# Decisões finais — Redesenho do fluxo de cadastro/recebimento (`ambiental_cadastro`)
 
 > Consolidado em 2026-06-14. Reúne **todas** as decisões fechadas no chat de redesign, inclusive as 3
 > últimas (escopo/integração) que ainda **não** estavam no plano técnico.
@@ -40,7 +40,7 @@ Essas duas ficam no **topo do menu** e são feitas/verificadas primeiro. O app *
 ## Decisões de escopo (as 3 últimas — ainda não no plano técnico)
 
 1. **Remover duplicação — cadastro só ESCREVE.** O `dashboard_servicos` já faz toda a verificação/visualização
-   e está no ar. Então no `dashboard_cadastro` **dropar a view "Serviços (preview)" e o "Dashboard analítico"**.
+   e está no ar. Então no `ambiental_cadastro` **dropar a view "Serviços (preview)" e o "Dashboard analítico"**.
    Menu final do cadastro: ⭐Cadastrar OS · ⭐Receber OS · Ordens (lista/gestão) · Equipes/Usuários/Tipos (admin)
    · Histórico (auditoria). **`dashboard_servicos` fica intacto.**
 2. **Pendência de fotos é NOVA — controlar aqui.** Implementar a aba "Aguardando fotos" (OS `CONCLUIDA` com

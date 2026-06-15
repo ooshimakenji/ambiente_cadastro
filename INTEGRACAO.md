@@ -1,4 +1,4 @@
-# Integração `dashboard_cadastro` → `dashboard_servicos`
+# Integração `ambiental_cadastro` → `dashboard_servicos`
 
 > Status: **ADIADA** (decisão do usuário em 2026-06-14). Este documento descreve o pipeline real,
 > a ponte que já existe no backend e o caminho recomendado para ligar a integração quando for a hora.
@@ -31,7 +31,7 @@ SPA (React + vanilla)     ← fetch do data.json + polling a cada 30s
 
 ## 2. A ponte JÁ existe no backend do cadastro
 
-O `dashboard_cadastro` já expõe o endpoint:
+O `ambiental_cadastro` já expõe o endpoint:
 
 ```
 GET /integracao/servicos   → DadosServicosExport
