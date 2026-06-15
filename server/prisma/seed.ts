@@ -1,19 +1,39 @@
 // =====================================================================
 // Seed idempotente — ambiental_cadastro (modelo v3: OS multi-saída).
-// Cria ADMIN/supervisor, equipes, tipos, e cenários de OS com saídas:
-//   - OS com 2 saídas (NAO_REALIZADO depois CONCLUIDA com fotos)
-//   - OS CONCLUIDA com SEM_FOTOS (aguardando fotos)
-//   - OS com FolhaEnvio (enviadaCasaEm setado)
-//   - OS ABERTA em campo (saída EM_CAMPO)
+// Cria ADMIN/supervisor + os tipos de serviço e equipes reais (pré-setados,
+// extraídos da planilha do dono). NÃO cria OS — a lista de OS nasce vazia;
+// as OS entram pela operação (Cadastrar OS) mês a mês.
 // Rodar: npm run seed  (carrega .env via --env-file e usa tsx).
 //
-// Idempotência: Usuário/Equipe/Tipo via upsert por chave; OS criadas só se
-// ainda não existir nenhuma (evita duplicar a cada run).
+// Idempotência: tudo via upsert por nome/login — re-rodar não duplica.
 // =====================================================================
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
+
+// Tipos de serviço pré-setados (planilha "SERVIÇOS IMEDIATOS" → aba Apoio).
+const TIPOS_SERVICO = [
+  'Cavalete', 'Rede/ramal', "Falta d'água", 'Ligação de esgoto', 'Manutenção de esgoto',
+  'Serviços especiais', 'Manutenção Hidraulica', 'Sondagem', 'Reclamação', 'Medição de Pressão',
+  'Água Suja', 'Serviço de Munck', 'Intervenção Hidrossanitária', 'Manobra de Registro',
+  'Abertura chamado plantão', 'Rebaixamento C.I.', 'Torneiro', 'Limpeza', 'Extravasamento de Esgoto CI',
+  'Deslocamento de Rede', 'Ampliação de rede de água', 'Desobstrução ramal de esgoto', 'Visita Técnica',
+  'Religação', 'Ampliação de rede de esgoto', 'Esgotamento de EE', 'Obras Terceiros', 'Lacrar HD',
+]
+
+// Equipes/responsáveis de campo pré-setados (planilha → aba Apoio).
+const EQUIPES = [
+  'Equipe Alfa', 'Equipe Bravo', 'Aldemir', 'Alisson', 'Anderson', 'Antônio', 'Aurélio', 'CK',
+  'Cláudio', 'Diego Santos', 'Edson Rodrigo', 'Emanuel', 'Eric', 'Evens', 'Ewerton', 'Giovane',
+  'Hidrojato', 'Igor', 'Israel', 'Itamar', 'Jonathan', 'Leonardo', 'Maciel', 'Maicon', 'Márcio',
+  'Matheus', 'Melo', 'Mendonça', 'Morais', 'Nascimento', 'Nilson', 'Nunes', 'Ranan', 'Raziel',
+  'Roberto', 'Rodolfo', 'Santos', 'Schneider', 'Fabiano', 'Daniel', 'Maurício', 'Cleverson',
+  'Ricardo', 'Leandro', 'Peters', 'Sidney', 'Humberto', 'Floriano', 'Jefferson', 'Pedroso',
+  'Rodrigo', 'Serrano', 'Nicholas', 'Bruno', 'Jairo (Xanxerê)', 'Eduardo', 'Gustavo Cadore',
+  'Christian', 'Eliseu', 'Lucas', 'Dennis', 'Nantes', 'Foppa', 'Quilante', 'Roberio',
+  'João Victor', 'Macedo',
+]
 
 async function main() {
   const ADMIN_LOGIN = process.env.ADMIN_LOGIN ?? 'admin'
@@ -29,14 +49,22 @@ async function main() {
   })
   console.log(`ADMIN pronto: #${admin.id} (${admin.login})`)
 
-  const equipeAlfa = await upsertEquipePorNome('Equipe Alfa', 'Equipe de campo região central')
-  const equipeBravo = await upsertEquipePorNome('Equipe Bravo', 'Equipe de campo região sul')
-  console.log(`Equipes prontas: #${equipeAlfa.id}, #${equipeBravo.id}`)
+  const descricoesEquipe: Record<string, string> = {
+    'Equipe Alfa': 'Equipe de campo região central',
+    'Equipe Bravo': 'Equipe de campo região sul',
+  }
+  let equipeAlfa = null as Awaited<ReturnType<typeof upsertEquipePorNome>> | null
+  for (const nome of EQUIPES) {
+    const eq = await upsertEquipePorNome(nome, descricoesEquipe[nome] ?? '')
+    if (nome === 'Equipe Alfa') equipeAlfa = eq
+  }
+  if (!equipeAlfa) equipeAlfa = await upsertEquipePorNome('Equipe Alfa', descricoesEquipe['Equipe Alfa'])
+  console.log(`Equipes prontas: ${EQUIPES.length}`)
 
-  const tipoCavalete = await upsertTipoPorNome('Cavalete')
-  const tipoRedeRamal = await upsertTipoPorNome('Rede/ramal')
-  const tipoFaltaAgua = await upsertTipoPorNome("Falta d'água")
-  console.log(`Tipos prontos: #${tipoCavalete.id}, #${tipoRedeRamal.id}, #${tipoFaltaAgua.id}`)
+  for (const nome of TIPOS_SERVICO) {
+    await upsertTipoPorNome(nome)
+  }
+  console.log(`Tipos prontos: ${TIPOS_SERVICO.length}`)
 
   const supervisor = await prisma.usuario.upsert({
     where: { login: 'supervisor' },
@@ -53,141 +81,7 @@ async function main() {
   console.log(`Supervisor pronto: #${supervisor.id} (${supervisor.login})`)
 
   const totalOS = await prisma.ordemServico.count()
-  if (totalOS > 0) {
-    console.log(`OS já existentes (${totalOS}) — pulando criação de exemplos`)
-    console.log('Seed concluído.')
-    return
-  }
-
-  const agora = new Date()
-  const ontem = new Date(agora.getTime() - 24 * 3600 * 1000)
-
-  // --- Cenário 1: OS ABERTA com saída EM_CAMPO ---
-  const os1 = await prisma.ordemServico.create({
-    data: { sequencial: '2026090001', tipoServicoId: tipoCavalete.id, status: 'ABERTA', criadoPorId: admin.id },
-  })
-  await prisma.saida.create({
-    data: {
-      ordemId: os1.id,
-      equipeId: equipeAlfa.id,
-      responsavelId: supervisor.id,
-      status: 'EM_CAMPO',
-      tipo: 'CAMPO',
-      anotacoes: 'Cliente relatou falta de cavalete na entrada',
-      criadoPorId: admin.id,
-    },
-  })
-
-  // --- Cenário 2: OS com 2 saídas — NAO_REALIZADO (batedor) depois CONCLUIDA c/ fotos ---
-  const os2 = await prisma.ordemServico.create({
-    data: {
-      sequencial: '2026090002',
-      tipoServicoId: tipoRedeRamal.id,
-      status: 'CONCLUIDA',
-      concluidoEm: agora,
-      criadoPorId: admin.id,
-    },
-  })
-  await prisma.saida.create({
-    data: {
-      ordemId: os2.id,
-      equipeId: equipeBravo.id,
-      responsavelId: supervisor.id,
-      status: 'NAO_REALIZADO',
-      tipo: 'CAMPO',
-      anotacoes: 'Local sem acesso — visita (batedor)',
-      criadoPorId: admin.id,
-      criadoEm: ontem,
-      recebidoEm: ontem,
-    },
-  })
-  await prisma.saida.create({
-    data: {
-      ordemId: os2.id,
-      equipeId: equipeAlfa.id,
-      responsavelId: supervisor.id,
-      status: 'CONCLUIDA',
-      fotos: 'COM_FOTOS',
-      tipo: 'CAMPO',
-      anotacoes: 'Refeito e concluído',
-      criadoPorId: admin.id,
-      recebidoEm: agora,
-    },
-  })
-
-  // --- Cenário 3: OS CONCLUIDA SEM_FOTOS (aguardando fotos) ---
-  const os3 = await prisma.ordemServico.create({
-    data: {
-      sequencial: '2026090003',
-      tipoServicoId: tipoFaltaAgua.id,
-      status: 'CONCLUIDA',
-      concluidoEm: agora,
-      criadoPorId: admin.id,
-    },
-  })
-  await prisma.saida.create({
-    data: {
-      ordemId: os3.id,
-      equipeId: equipeBravo.id,
-      responsavelId: supervisor.id,
-      status: 'CONCLUIDA',
-      fotos: 'SEM_FOTOS',
-      tipo: 'CAMPO',
-      anotacoes: 'Finalizada sem fotos — equipe deve regularizar',
-      criadoPorId: admin.id,
-      recebidoEm: agora,
-    },
-  })
-
-  // --- Cenário 4: OS com FolhaEnvio (folha já foi à casa) ---
-  const os4 = await prisma.ordemServico.create({
-    data: {
-      sequencial: '2026090004',
-      tipoServicoId: tipoCavalete.id,
-      status: 'CONCLUIDA',
-      concluidoEm: ontem,
-      enviadaCasaEm: agora,
-      criadoPorId: admin.id,
-    },
-  })
-  await prisma.saida.create({
-    data: {
-      ordemId: os4.id,
-      equipeId: equipeAlfa.id,
-      responsavelId: supervisor.id,
-      status: 'CONCLUIDA',
-      fotos: 'COM_FOTOS',
-      tipo: 'CAMPO',
-      criadoPorId: admin.id,
-      criadoEm: ontem,
-      recebidoEm: ontem,
-    },
-  })
-  await prisma.folhaEnvio.create({
-    data: {
-      ordemId: os4.id,
-      descricao: 'Folha física entregue no ambiente 2',
-      periodo: 'MANHA',
-      recebidoPorId: admin.id,
-      criadoPorId: supervisor.id,
-    },
-  })
-
-  // Eventos de criação (timeline/histórico).
-  for (const os of [os1, os2, os3, os4]) {
-    await prisma.eventoAuditoria.create({
-      data: {
-        entidade: 'OS',
-        entidadeId: os.id,
-        acao: 'CRIACAO',
-        autorId: admin.id,
-        descricao: `Ordem de serviço ${os.sequencial} criada (seed)`,
-        diff: null,
-      },
-    })
-  }
-
-  console.log('OS de exemplo criadas: 4 (multi-saída, aguardando fotos, folha enviada).')
+  console.log(`OS no banco: ${totalOS} (seed não cria OS — entram pela operação).`)
   console.log('Seed concluído.')
 }
 
