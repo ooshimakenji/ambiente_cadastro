@@ -222,6 +222,19 @@ export interface NovaFolhaEnvio {
   recebidoPorId?: number | null
 }
 
+// Lote: bipar vários sequenciais (mesmo período/quem recebeu/descrição).
+export interface NovaFolhaLote {
+  periodo: Periodo
+  recebidoPorId?: number | null
+  descricao?: string | null
+  sequenciais: string[]
+}
+
+export interface FolhaLoteResultado {
+  criadas: FolhaEnvio[]
+  naoEncontradas: string[]
+}
+
 // ---------- Filtros ----------
 
 export interface FiltroOrdens {

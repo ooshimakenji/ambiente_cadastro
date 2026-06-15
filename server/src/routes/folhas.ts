@@ -54,6 +54,14 @@ const novaFolhaSchema = z.object({
   recebidoPorId: z.number().int().positive().nullable().optional(),
 })
 
+// Lote: bipar vários sequenciais numa sessão (mesmo período/quem recebeu/descrição).
+const loteFolhasSchema = z.object({
+  periodo: z.enum(PERIODO),
+  recebidoPorId: z.number().int().positive().nullable().optional(),
+  descricao: z.string().nullable().optional(),
+  sequenciais: z.array(z.string().trim().min(1)).min(1, 'informe ao menos 1 sequencial').max(200),
+})
+
 const filtroFolhasSchema = z.object({
   sequencial: z.string().trim().min(1).optional(),
   periodo: z.enum(PERIODO).optional(),
@@ -105,6 +113,64 @@ folhasRouter.post('/', async (req: Request, res: Response, next: NextFunction) =
     })
 
     res.status(201).json(serializarFolha(folha))
+  } catch (e) {
+    next(e)
+  }
+})
+
+// ---------- POST /folhas/lote ----------
+// Registra N folhas de uma vez (uma por sequencial). Cria só as OS encontradas;
+// devolve os sequenciais inexistentes em `naoEncontradas` (não falha o lote todo).
+
+folhasRouter.post('/lote', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dados = loteFolhasSchema.parse(req.body)
+    const autorId = req.usuario!.id
+
+    // Dedup preservando a ordem de bipagem.
+    const sequenciais = [...new Set(dados.sequenciais)]
+
+    const ordens = await prisma.ordemServico.findMany({
+      where: { sequencial: { in: sequenciais } },
+      select: { id: true, sequencial: true },
+    })
+    const porSequencial = new Map(ordens.map((o) => [o.sequencial, o]))
+    const naoEncontradas = sequenciais.filter((s) => !porSequencial.has(s))
+    const encontradas = sequenciais
+      .map((s) => porSequencial.get(s))
+      .filter((o): o is { id: number; sequencial: string } => Boolean(o))
+
+    const criadas = await prisma.$transaction(async (tx) => {
+      const acc = []
+      for (const os of encontradas) {
+        const nova = await tx.folhaEnvio.create({
+          data: {
+            ordemId: os.id,
+            descricao: dados.descricao ?? null,
+            periodo: dados.periodo,
+            recebidoPorId: dados.recebidoPorId ?? null,
+            criadoPorId: autorId,
+          },
+          include: includeFolha,
+        })
+        await tx.ordemServico.update({ where: { id: os.id }, data: { enviadaCasaEm: new Date() } })
+        await registrarEvento(
+          {
+            entidade: 'FOLHA_ENVIO',
+            entidadeId: nova.id,
+            acao: 'CRIACAO',
+            autorId,
+            depois: { ordemId: os.id, periodo: dados.periodo, descricao: dados.descricao ?? null },
+            descricao: `OS ${os.sequencial}: folha enviada à casa (${dados.periodo}, lote)`,
+          },
+          tx,
+        )
+        acc.push(nova)
+      }
+      return acc
+    })
+
+    res.status(201).json({ criadas: criadas.map(serializarFolha), naoEncontradas })
   } catch (e) {
     next(e)
   }

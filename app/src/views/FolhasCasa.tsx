@@ -20,6 +20,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
+import Chip from '@mui/material/Chip'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined'
 import NightsStayOutlinedIcon from '@mui/icons-material/NightsStayOutlined'
@@ -30,7 +31,7 @@ import { api, ApiError } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../hooks/useAuth'
 import { formatarData } from '../lib/format'
-import type { FolhaEnvio, UsuarioComEquipe, NovaFolhaEnvio, Periodo } from '../lib/types'
+import type { FolhaEnvio, UsuarioComEquipe, NovaFolhaLote, FolhaLoteResultado, Periodo } from '../lib/types'
 import { PERIODO_LABELS } from '../lib/types'
 
 // -----------------------------------------------------------------------
@@ -42,8 +43,9 @@ export default function FolhasCasa() {
   const toast = useToast()
   const { usuario } = useAuth()
 
-  // Form
+  // Form — sessão de lote: período/quem recebeu/descrição compartilhados; vários sequenciais bipados.
   const [sequencial, setSequencial] = useState('')
+  const [bipados, setBipados] = useState<string[]>([])
   const [periodo, setPeriodo] = useState<Periodo>('MANHA')
   const [descricao, setDescricao] = useState('')
   const [recebidoPorId, setRecebidoPorId] = useState<number | ''>(usuario?.id ?? '')
@@ -102,46 +104,76 @@ export default function FolhasCasa() {
     carregarUsuarios()
   }, [usuario])
 
-  function limparForm() {
-    setSequencial('')
-    setPeriodo('MANHA')
-    setDescricao('')
-    setRecebidoPorId(usuario?.id ?? '')
+  function focarSequencial() {
     setTimeout(() => sequencialRef.current?.focus(), 50)
   }
 
-  async function registrarEnvio() {
+  // Adiciona o sequencial bipado à lista do lote (dedup, ignora vazio).
+  function adicionarBipado() {
     const seq = sequencial.trim()
     if (!seq) return
+    if (bipados.includes(seq)) {
+      toast(`Sequencial ${seq} já adicionado`)
+      setSequencial('')
+      focarSequencial()
+      return
+    }
+    setBipados((prev) => [...prev, seq])
+    setSequencial('')
+    focarSequencial()
+  }
+
+  function removerBipado(seq: string) {
+    setBipados((prev) => prev.filter((s) => s !== seq))
+  }
+
+  function handleSequencialKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      adicionarBipado()
+    }
+  }
+
+  // Registra todos os bipados de uma vez via POST /folhas/lote.
+  async function registrarLote() {
+    // Inclui um sequencial pendente no campo, se houver (sem precisar dar Enter antes).
+    const seqPendente = sequencial.trim()
+    const lista = seqPendente && !bipados.includes(seqPendente) ? [...bipados, seqPendente] : bipados
+    if (lista.length === 0) return
 
     setEnviando(true)
     try {
-      const body: NovaFolhaEnvio = {
-        sequencial: seq,
+      const body: NovaFolhaLote = {
         periodo,
         descricao: descricao.trim() || null,
         recebidoPorId: recebidoPorId !== '' ? (recebidoPorId as number) : null,
+        sequenciais: lista,
       }
-      await api.post<FolhaEnvio>('/folhas', body)
-      toast(`Envio registrado para OS ${seq}`)
-      limparForm()
+      const res = await api.post<FolhaLoteResultado>('/folhas/lote', body)
+      const nCriadas = res.criadas.length
+      if (nCriadas > 0) toast(`${nCriadas} folha(s) registrada(s)`)
+      if (res.naoEncontradas.length > 0) {
+        toast(`Sem OS para: ${res.naoEncontradas.join(', ')}`)
+        // Mantém só os não encontrados na lista para o usuário revisar/corrigir.
+        setBipados(res.naoEncontradas)
+        setSequencial('')
+      } else {
+        setBipados([])
+        setSequencial('')
+        setDescricao('')
+      }
+      focarSequencial()
       carregarFolhas()
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : 'Erro ao registrar envio'
+      const msg = e instanceof ApiError ? e.message : 'Erro ao registrar lote'
       toast(msg)
     } finally {
       setEnviando(false)
     }
   }
 
-  function handleSequencialKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      registrarEnvio()
-    }
-  }
-
-  const desabilitado = !sequencial.trim() || enviando
+  const totalLote = bipados.length + (sequencial.trim() && !bipados.includes(sequencial.trim()) ? 1 : 0)
+  const desabilitado = totalLote === 0 || enviando
 
   return (
     <Box>
@@ -188,20 +220,47 @@ export default function FolhasCasa() {
           mb: 4,
         }}
       >
-        {/* Sequencial */}
-        <TextField
-          label="Sequencial *"
-          placeholder="Bipe aqui a ordem de serviço"
-          value={sequencial}
-          onChange={(e) => setSequencial(e.target.value)}
-          onKeyDown={handleSequencialKeyDown}
-          inputRef={sequencialRef}
-          autoFocus
-          fullWidth
-          size="medium"
-          disabled={enviando}
-          slotProps={{ htmlInput: { maxLength: 80, autoComplete: 'off' } }}
-        />
+        {/* Sequencial — bipe e pressione Enter para adicionar à lista */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <TextField
+            label="Sequencial *"
+            placeholder="Bipe a OS e pressione Enter"
+            value={sequencial}
+            onChange={(e) => setSequencial(e.target.value)}
+            onKeyDown={handleSequencialKeyDown}
+            inputRef={sequencialRef}
+            autoFocus
+            fullWidth
+            size="medium"
+            disabled={enviando}
+            helperText="Bipe vários sequenciais — cada Enter adiciona um à lista abaixo"
+            slotProps={{ htmlInput: { maxLength: 80, autoComplete: 'off' } }}
+          />
+
+          {bipados.length > 0 && (
+            <Box>
+              <Typography variant="caption" sx={{ color: m3.onSurfaceVariant, fontWeight: 600 }}>
+                {bipados.length} sequencial(is) na lista
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {bipados.map((seq) => (
+                  <Chip
+                    key={seq}
+                    label={seq}
+                    onDelete={enviando ? undefined : () => removerBipado(seq)}
+                    disabled={enviando}
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                      bgcolor: m3.secondaryContainer,
+                      color: m3.onSecondaryContainer,
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </Box>
 
         {/* Período */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -294,7 +353,7 @@ export default function FolhasCasa() {
           fullWidth
           size="large"
           disabled={desabilitado}
-          onClick={registrarEnvio}
+          onClick={registrarLote}
           startIcon={enviando ? <CircularProgress size={18} color="inherit" /> : undefined}
           sx={{
             borderRadius: `${shape.full}px`,
@@ -307,7 +366,11 @@ export default function FolhasCasa() {
             '&:disabled': { opacity: 0.5 },
           }}
         >
-          {enviando ? 'Registrando…' : 'Registrar envio'}
+          {enviando
+            ? 'Registrando…'
+            : totalLote > 0
+              ? `Registrar ${totalLote} folha(s)`
+              : 'Registrar folhas'}
         </Button>
       </Paper>
 
