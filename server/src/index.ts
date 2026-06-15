@@ -12,6 +12,9 @@
 import express from 'express'
 import type { RequestHandler } from 'express'
 import cors from 'cors'
+import path from 'node:path'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { authRouter } from './auth/index.js'
 import {
@@ -65,6 +68,19 @@ app.use('/folhas', requireAuth, requirePermissao('folhas'), folhasRouter)
 app.use('/eventos', requireAuth, requirePermissao('historico'), eventosRouter)
 app.use('/integracao', requireAuth, integracaoRouter)
 
+// ---------- Frontend estático (produção) ----------
+// Se o build do app existir (app/dist), o backend serve a SPA na MESMA porta
+// (uma só porta na LAN). Em dev isso é ignorado (o Vite serve em :5173).
+// __dirname (ESM) → server/dist (prod) ou server/src (dev tsx); em ambos
+// ../../app/dist aponta para o build do frontend.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const distApp = path.resolve(__dirname, '../../app/dist')
+if (existsSync(distApp)) {
+  app.use(express.static(distApp))
+  // SPA fallback: qualquer GET não-API devolve o index.html (rotas do cliente).
+  app.get('*', (_req, res) => res.sendFile(path.join(distApp, 'index.html')))
+}
+
 // 404 para rotas não registradas.
 app.use(notFoundHandler)
 
@@ -72,5 +88,8 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 app.listen(PORT, () => {
-  console.log(`API ouvindo em http://localhost:${PORT}`)
+  console.log(`Servidor ouvindo na porta ${PORT}`)
+  console.log(`  Local:  http://localhost:${PORT}`)
+  console.log(`  Rede:   http://<IP-do-PC>:${PORT}  (acesso pela LAN)`)
+  if (existsSync(distApp)) console.log('  Frontend: servido do app/dist (produção, porta única)')
 })

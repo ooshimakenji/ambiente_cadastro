@@ -1,7 +1,8 @@
 // Cliente fetch do backend. Injeta Authorization: Bearer e, em 401, dispara logout.
-// Base URL via proxy do Vite (/api → http://localhost:3001) — ver vite.config.ts.
+// DEV: usa o proxy do Vite (/api → http://localhost:3001) — ver vite.config.ts.
+// PROD: backend serve a SPA na mesma origem, então a API fica na raiz ('').
 
-const BASE = '/api'
+const BASE = import.meta.env.DEV ? '/api' : ''
 
 let token: string | null = null
 let onUnauthorized: (() => void) | null = null
