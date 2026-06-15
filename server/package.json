@@ -12,7 +12,10 @@
     "prisma:generate": "prisma generate",
     "integracao:publicar": "tsx --env-file=.env scripts/publicador.ts",
     "integracao:validar": "tsx --env-file=.env scripts/validarIntegracao.ts",
-    "integracao:local": "npm run integracao:publicar && npm run integracao:validar"
+    "integracao:local": "npm run integracao:publicar && npm run integracao:validar",
+    "import:extrair": "python scripts/extrair_planilha.py",
+    "import:planilha": "tsx --env-file=.env scripts/importarPlanilha.ts",
+    "import:massa": "npm run import:extrair && npm run import:planilha"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
