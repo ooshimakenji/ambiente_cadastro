@@ -3,16 +3,22 @@ import { useEffect, useRef } from 'react'
 // =====================================================================
 // useAutoLogout — reinicia timer de inatividade em eventos do usuário.
 // Ao expirar, chama onTimeout (geralmente logout()).
+// ADMINs são isentos: o hook não inicia listeners nem timer para eles.
 // =====================================================================
 
 const EVENTOS: Array<keyof WindowEventMap> = ['mousemove', 'keydown', 'click', 'scroll']
 
-export function useAutoLogout(timeoutMs: number, onTimeout: () => void): void {
+export function useAutoLogout(timeoutMs: number, onTimeout: () => void, isAdmin: boolean = false): void {
   // Ref para sempre acessar a versão mais recente do callback sem recriar efeitos
   const onTimeoutRef = useRef(onTimeout)
   onTimeoutRef.current = onTimeout
 
   useEffect(() => {
+    // Se o usuário é ADMIN, não arma listeners nem timer
+    if (isAdmin) {
+      return
+    }
+
     let timerId: ReturnType<typeof setTimeout>
 
     const reiniciar = () => {
@@ -38,5 +44,5 @@ export function useAutoLogout(timeoutMs: number, onTimeout: () => void): void {
         window.removeEventListener(evento, reiniciar)
       })
     }
-  }, [timeoutMs]) // recria apenas se o timeout mudar
+  }, [timeoutMs, isAdmin]) // recria se o timeout ou status de admin mudar
 }

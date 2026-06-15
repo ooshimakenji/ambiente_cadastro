@@ -2,95 +2,100 @@
 
 > Doc de estado **versionado** para retomar sem se perder se o contexto/tokens estourarem.
 > Plano completo: `C:\Users\tanuk\.claude\plans\glittery-cooking-penguin.md`.
-> Atualizar + commitar este arquivo **a cada fronteira de fase**.
+> **Para retomar, diga ao Claude:** "continuar a Fase B do redesign v3 do ambiental_cadastro — ver HANDOFF_V3.md".
 
 ## Objetivo
 
 Evoluir o `ambiental_cadastro` do modelo linear (1 OS = 1 registro, `sequencial @unique`, 409 ao repetir) para
 **OS (sequencial único) → N Saídas/atendimentos**. Foco: **rastreabilidade total**.
 
-## Garantias inegociáveis (Parte 0 do plano)
+## Garantias inegociáveis (Parte 0)
+- **`Saída` append-only/imutável**: re-despachar a OS **adiciona** saída, nunca sobrescreve/zera. Status da OS é **derivado**.
+- **Sem hard delete de OS/Saída** (DELETE /ordens removido). Encerrar = estado `CANCELADA`.
+- **Auditoria** em toda mutação. **Migração de produção não destrutiva** (reset de `dev.db` só em dev).
 
-- **`Saída` é append-only/imutável**: re-despachar a mesma OS **adiciona** saída, nunca sobrescreve/zera. Status da
-  OS é **derivado** das saídas.
-- **Sem hard delete de OS/Saída** (remover o `DELETE /ordens/:id` atual). Encerrar = estado `CANCELADA`.
-- **Auditoria** em toda mutação (autor+data). **Migração de produção não destrutiva** (reset de `dev.db` só em dev).
+═══════════════════════════════════════════════════════════════════════════
+## ⏩ ESTADO ATUAL (2026-06-15) — LEIA PRIMEIRO
 
-## Modelo alvo
+- ✅ **FASE A CONCLUÍDA e COMMITADA** — commit `a284595` ("feat(v3): modelo OS->N saídas + backend (Fase A)").
+  Migração `20260615070620_v3_os_multi_saida` aplicada; seed verde (4 cenários); **`tsc` do server VERDE**.
+- ⏳ **FASE B NÃO INICIADA** (os 3 agentes de frontend foram cancelados antes de rodar).
+  ⚠️ **O build do FRONT está QUEBRADO agora**: as views (`OrdensServico.tsx`, `CadastrarOS.tsx`, `ReceberOS.tsx`)
+  ainda consomem o modelo ANTIGO e importam DTOs removidos (`EditarOrdem`, `MudarStatusOrdem`, `DashboardResumo`).
+  Isso é esperado — a Fase B reescreve essas views.
+- ⏳ **FASE C** (review + verify) pendente.
+- **Próximo passo exato:** executar a **FASE B** conforme a especificação abaixo (3 unidades de trabalho, arquivos
+  disjuntos). Pode ser inline ou com agentes (fan-out ≤3). Depois commitar e seguir p/ Fase C.
+- Git: branch `main`. Commits v3: `a284595` (Fase A). HANDOFF anterior em `d8de867`.
+  (Esta atualização do HANDOFF pode estar **não commitada** — commitar ao retomar.)
 
-- `OrdemServico` (pai): `sequencial @unique`, `tipoServicoId`, `status` derivado (`ABERTA|CONCLUIDA|CANCELADA`),
-  `concluidoEm?`, `enviadaCasaEm?`, `criadoPorId`, `criadoEm`. (Sai `fotos`/`equipeId`/`responsavelId` do nível OS.)
-- `Saida` (filho): `ordemId`, `equipeId?`, `responsavelId?`, `status` (`EM_CAMPO|CONCLUIDA|NAO_REALIZADO|CANCELADA`),
-  `fotos` (`COM_FOTOS|SEM_FOTOS|null`), `tipo` (`CAMPO|FOTO`), `anotacoes?`, `criadoEm`, `recebidoEm?`.
-- `FolhaEnvio` (folhas casa): `ordemId`, `descricao?`, `periodo` (`MANHA|TARDE`), `recebidoPorId`, `criadoEm`.
+═══════════════════════════════════════════════════════════════════════════
+## CONTRATO v3 (settado na Fase A — fonte para a Fase B)
 
-## Regras-chave
+**Tipos** (`app/src/lib/types.ts`, NÃO editar):
+- `OrdemServico`: `sequencial`, `tipoServicoId`, `status` ∈ `ABERTA|CONCLUIDA|CANCELADA`, `concluidoEm?`,
+  `enviadaCasaEm?`, `criadoPorId`, `criadoEm`. (Não há mais `fotos`/`equipeId`/`responsavelId`/`anotacoes`/`numero` na OS.)
+- `OrdemServicoExpandida` = OS + `saidas: Saida[]` (ordem asc) + `tipoServico`.
+- `Saida`: `id`, `ordemId`, `equipeId?`, `responsavelId?`, `status` ∈ `EM_CAMPO|CONCLUIDA|NAO_REALIZADO|CANCELADA`,
+  `fotos` ∈ `COM_FOTOS|SEM_FOTOS|null`, `tipo` ∈ `CAMPO|FOTO`, `anotacoes?`, `criadoEm`, `recebidoEm?`.
+- `FolhaEnvio`: `id`, `ordemId`, `descricao?`, `periodo` ∈ `MANHA|TARDE`, `recebidoPorId?`, `criadoEm`.
+- DTOs: `NovaOrdem` `{sequencial,tipoServicoId,equipeId?,responsavelId?,anotacoes?}` ·
+  `ReceberSaida` `{status,fotos?,anotacoes?}` · `NovaSaidaFoto` · `NovaFolhaEnvio` `{sequencial,descricao?,periodo,recebidoPorId?}`.
+- Labels/cores: `STATUS_OS_LABELS/COR`, `STATUS_SAIDA_LABELS/COR`, `DESFECHO_SAIDA_LABELS`, `FOTOS_LABELS`, `PERIODO_LABELS`.
+- `statusMap.derivarStatusCampo(status, saidas)` → vocabulário do dashboard_servicos.
 
-- **Cadastrar** (`POST /ordens`): sequencial novo → cria OS + 1ª saída (com equipe → `EM_CAMPO`); sequencial
-  existente → **nova saída** (re-despacho). **Sem 409 de duplicado.**
-- **Receber** por desfecho (inputs `sequencial → status → fotos → descrição`): `CONCLUIDA` (fecha OS; `SEM_FOTOS`
-  mantém pendência de foto) · `NAO_REALIZADO` (visita/batedor; OS segue ABERTA) · `CANCELADA`.
-- **Saída de foto** (`tipo=FOTO`): regulariza foto de OS concluída-sem-foto → marca `COM_FOTOS`.
-- **Folhas casa** (`/folhas`): bipagem registra envio + `enviadaCasaEm` (rastro; não muda status, não imputa
-  responsabilidade). Indicador "folha já foi à casa".
-- **Admin sem auto-logoff**: JWT admin longo (`JWT_EXPIRES_IN_ADMIN`, default 12h) + front não derruba ADMIN.
-- Export `/integracao/servicos`: ABERTA+saída EM_CAMPO→`atendendo`; última NAO_REALIZADO→`batedor`; sem saída→
-  `nao_visitada`; CONCLUIDA→`concluida`; CANCELADA→`cancelada`.
-- Limpeza: delete tipo/equipe em uso → 409; remover `/dashboard`+`DashboardResumo`; corrigir aviso MUI Select.
+**Rotas** (backend já pronto; confirmar params em `server/src/routes/{ordens,saidas,folhas}.ts`):
+- `POST /ordens` — cadastrar; se `sequencial` já existe → **nova saída** (re-despacho), **sem 409**.
+- `PATCH /saidas/:id/receber` — `{status,fotos?,anotacoes?}`; só saída `EM_CAMPO`. CONCLUIDA fecha a OS; SEM_FOTOS deixa pendência.
+- `POST /ordens/:id/saida-foto` — cria saída tipo FOTO p/ regularizar foto.
+- `POST /folhas` / `GET /folhas` — folhas casa (registra + seta `enviadaCasaEm`).
+- `GET /ordens?sequencial=` · `GET /ordens?aguardandoFotos=true` · `GET /ordens/:id` (expandida) · `GET /tipos|/equipes|/usuarios`.
+- **REMOVIDOS:** `DELETE /ordens/:id`, `PATCH /ordens/:id/status`, `PATCH /ordens/:id/receber`, `PATCH /ordens/:id`, `/dashboard`.
+- Auth: JWT admin 12h (`JWT_EXPIRES_IN_ADMIN`), demais 15m.
 
-## Checklist por fase
+═══════════════════════════════════════════════════════════════════════════
+## FASE B — especificação para executar (3 unidades, arquivos DISJUNTOS)
 
-### Fase A — modelo + backend + contratos (Opus)
-- [x] schema.prisma (OrdemServico/Saida/FolhaEnvio) + migração + seed (dev) + reset dev.db
-- [x] domain.ts (STATUS_OS/STATUS_SAIDA/TIPO_SAIDA/PERIODO; entidades auditoria +SAIDA/+FOLHA_ENVIO)
-- [x] rotas ordens (cadastrar=nova saída, sem 409; remover DELETE), saidas (receber por desfecho, saída foto)
-- [x] rotas folhas (POST/GET) + indicador enviadaCasaEm
-- [x] tipos/equipes DELETE-em-uso→409; remover /dashboard
-- [x] export /integracao/servicos novo mapeamento
-- [x] auth: JWT admin longo
-- [x] contratos app/src/lib/types.ts + statusMap.ts
-- [x] `npm run build` do server verde
+Padrão: ler `app/src/views/Equipes.tsx` (MD3), `useAuth.tsx` (`usuario.id/nome/papel`), `Toast.tsx` (`useToast`),
+`useM3`, `format.ts` (`formatarData`), `api` genérico (`api.get/post/patch`, NÃO editar). Público idoso → botões/campos grandes.
+Typecheck: `cd app && npm run build` (NÃO `tsc --noEmit`).
 
-> **Fase A concluída (2026-06-15).** Migração `20260615070620_v3_os_multi_saida` aplicada;
-> seed verde (4 cenários); `tsc` verde. Rotas: `POST /ordens` (cadastrar/re-despacho),
-> `POST /ordens/:id/saida-foto`, `PATCH /saidas/:id/receber`, `POST|GET /folhas`. Sem `DELETE /ordens`.
-> Status da OS é derivado (`derivarStatusOS`); pendência de foto = saída CAMPO CONCLUIDA SEM_FOTOS
-> (`aguardandoFotos`), fechada quando a saída FOTO é recebida COM_FOTOS (marca a CAMPO como COM_FOTOS).
-> Contratos novos p/ Fase B: tipos `Saida`, `FolhaEnvio`, `OrdemServicoExpandida.saidas[]`;
-> DTOs `NovaOrdem`, `NovaSaidaFoto`, `ReceberSaida`, `NovaFolhaEnvio`; labels/cores STATUS_OS/STATUS_SAIDA.
-> `statusMap.derivarStatusCampo(status, saidas)` para o vocabulário do dashboard_servicos.
+### Unidade 1 (Sonnet) — telas de bipagem: `CadastrarOS.tsx`, `ReceberOS.tsx`, `FolhasCasa.tsx`(novo)
+- **CadastrarOS**: sequencial autofocus; Tipo(/tipos), Equipe(/equipes), Responsável(logado; ADMIN troca via /usuarios, SUPERVISOR travado), Anotações. Se sequencial já existe (`GET /ordens?sequencial=`) → mostra resumo + saídas e botão "Cadastrar nova saída"; senão "Cadastrar e atribuir". `POST /ordens`. **Corrigir aviso MUI Select out-of-range** (value '' até opções carregarem). Reset+refoco após sucesso.
+- **ReceberOS**: abas **Receber** e **Aguardando fotos**. Receber: bipa → `GET /ordens?sequencial=` → acha saída `EM_CAMPO` → inputs grandes **status (Concluída[default]/Não realizado/Cancelada) → fotos (se Concluída) → descrição** → `PATCH /saidas/{id}/receber`. Aguardando fotos: `GET /ordens?aguardandoFotos=true`; ação "Regularizar foto" via `POST /ordens/:id/saida-foto` + `PATCH /saidas/:id/receber {status:CONCLUIDA,fotos:COM_FOTOS}` (confirmar fluxo em saidas.ts).
+- **FolhasCasa** (novo): bipa sequencial + período(Manhã/Tarde) + descrição + quem recebeu(logado/ADMIN escolhe) → `POST /folhas`; lista `GET /folhas`. É só rastro (avisar na UI). Default export.
 
-### Fase B — frontend fan-out
-- [ ] CadastrarOS (nova saída se sequencial existe; fix aviso Select)
-- [ ] ReceberOS (desfecho botões grandes + fotos + descrição; aba Aguardando fotos)
-- [ ] FolhasCasa (nova tela bipagem + lista)
-- [ ] OrdensServico (timeline de saídas + indicador folha; ações por estado)
-- [ ] AppShell/menu (+ Folhas Casa); App abre em Cadastrar
-- [ ] useAutoLogout exceção ADMIN
-- [ ] cosmético package.json names
-- [ ] `npm run build` do app verde
+### Unidade 2 (Sonnet) — `OrdensServico.tsx` (reescrever, read-mostly)
+- Tabela OS: Sequencial · Status OS · Tipo · nº saídas · última saída(equipe+desfecho) · Foto pendente? · Folha à casa?(ícone se `enviadaCasaEm`) · Criada em. Busca/filtro por status.
+- Detalhe (drawer/expand): **timeline de todas as Saídas** (data, equipe/resp, tipo CAMPO/FOTO, desfecho, fotos, anotações, recebidoEm) + envios de folha + eventos de auditoria (se vierem no GET /ordens/:id). É o coração da rastreabilidade.
+- **Sem criar/editar/excluir** (append-only; sem DELETE). Remover todo código do modelo antigo (numero/titulo/endereco/DialogStatus/EditarOrdem/MudarStatusOrdem).
 
-### Fase C — review + verify
-- [ ] review adversarial (Opus)
-- [ ] verify E2E (multi-saída, desfechos, foto, folhas casa, delete-409, DELETE /ordens removido, admin no-logoff)
-- [ ] HANDOFF_V3 final + commit
+### Unidade 3 (Haiku) — navegação + auto-logout admin + cosmético
+- `AppShell.tsx` navItems: add **`folhas` → "Folhas Casa"** (ícone Outlined). Ordem: Cadastrar · Receber · Folhas Casa · Ordens · Equipes · Usuários(ADMIN) · Tipos · Histórico. Ajustar tipo `NavView` (+`folhas`).
+- `App.tsx`: importar `FolhasCasa` (`./views/FolhasCasa`, default), caso `folhas`→`<FolhasCasa/>`. View inicial `cadastrar`. Manter `usuarios` p/ ADMIN.
+- `useAutoLogout.ts`: **não derrubar ADMIN** — quando `papel==='ADMIN'`, não armar timer/listeners (sair cedo). SUPERVISOR continua caindo ~15min. Ver como é chamado (App.tsx + useAuth).
+- `package.json`: `app` → name `ambiental-cadastro-app`; `server` → `ambiental-cadastro-server`. `main.tsx`: conferir sem ToastProvider duplicado.
 
-## Estado atual
-- **2026-06-15:** Plano v3 aprovado; automode autorizado. Tasks #4–#7 criadas. Este doc criado.
-- **Próximo passo exato:** parar dev servers (liberar dev.db) e iniciar **Fase A** (agente Opus).
-- Repo: `ambiental_cadastro` (git local + remote `ooshimakenji/ambiente_cadastro`). Branch `main`.
-- v2 (modelo linear) está commitado no histórico (`de6ceb0`, `54f81b2`, `0767b5f`, README).
+### Após Fase B
+- `cd app && npm run build` VERDE. Commit: "feat(v3): frontend telas multi-saída + folhas casa (Fase B)". Marcar checklist abaixo.
+
+═══════════════════════════════════════════════════════════════════════════
+## FASE C — review + verify (após Fase B)
+- Review adversarial (Opus). Verify E2E (HTTP, server :3001): bipar→saída→receber cada desfecho→nova saída (mesmo sequencial, **append-only: saídas anteriores permanecem**)→concluir→aguardando fotos→regularizar foto→folhas casa + indicador "foi à casa"→`DELETE /ordens` não existe (404/405)→delete tipo/equipe em uso 404→409→admin não cai por inatividade. Builds verdes. HANDOFF final + commit.
+
+## Checklist
+### Fase A — [x] CONCLUÍDA (commit a284595)
+### Fase B — [ ] Unidade 1 (bipagem) · [ ] Unidade 2 (OrdensServico) · [ ] Unidade 3 (nav/logout/cosmético) · [ ] build app verde · [ ] commit
+### Fase C — [ ] review · [ ] verify E2E · [ ] HANDOFF final + commit
 
 ## Como retomar (comandos)
 ```
-# backend
-cd ambiental_cadastro/server
-npm install
-npx prisma generate && npx prisma migrate dev   # (dev) ou migrate deploy
-npm run seed
-npm run dev            # API :3001
-# frontend
-cd ../app && npm install && npm run dev          # :5173
+cd ambiental_cadastro/server && npm install && npx prisma generate && npm run dev   # API :3001 (dev.db já migrado+seedado)
+cd ../app && npm install && npm run dev                                              # :5173 (quebra até Fase B)
 # logins seed: admin/admin123 (ADMIN), supervisor/supervisor123
+# typecheck: (server) npm run build · (app) npm run build   — NÃO tsc --noEmit
 ```
-Typecheck: `cd server && npm run build` · `cd app && npm run build` (NÃO `tsc --noEmit`).
+
+## Notas futuras ("ambiente", fora desta leva)
+Importar a cópia da planilha do dono p/ massa real de OS; RBAC por tela (usuário só vê telas permitidas).
+Integração data.json (publicador + validação local, Opção 1) é a Parte 5 — após v3 assentar.

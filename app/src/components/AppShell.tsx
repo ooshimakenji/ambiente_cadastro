@@ -24,12 +24,13 @@ import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined'
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined'
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined'
+import ContentPasteGoOutlinedIcon from '@mui/icons-material/ContentPasteGoOutlined'
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
 import { useM3 } from '../theme/useM3'
 import { nav, shape } from '../theme/tokens'
 import type { Usuario } from '../lib/types'
 
-type NavView = 'cadastrar' | 'receber' | 'ordens' | 'equipes' | 'usuarios' | 'tipos' | 'historico'
+type NavView = 'cadastrar' | 'receber' | 'folhas' | 'ordens' | 'equipes' | 'usuarios' | 'tipos' | 'historico'
 
 interface AppShellProps {
   view: NavView
@@ -73,6 +74,7 @@ export default function AppShell({ view, onNavigate, usuario, onLogout, children
   const navItems: Array<{ view: NavView; label: string; icon: React.ElementType }> = [
     { view: 'cadastrar', label: 'Cadastrar OS', icon: AddCircleOutlineIcon },
     { view: 'receber', label: 'Receber OS', icon: DownloadDoneOutlinedIcon },
+    { view: 'folhas', label: 'Folhas Casa', icon: ContentPasteGoOutlinedIcon },
     { view: 'ordens', label: 'Ordens de Serviço', icon: AssignmentOutlinedIcon },
     { view: 'equipes', label: 'Equipes', icon: GroupOutlinedIcon },
     ...(usuario.papel === 'ADMIN' ? [{ view: 'usuarios' as const, label: 'Usuários', icon: PersonOutlinedIcon }] : []),

@@ -10,6 +10,7 @@ import Login from './views/Login'
 // Importações das views (escritas por outros agentes em paralelo — não criar aqui)
 import CadastrarOS from './views/CadastrarOS'
 import ReceberOS from './views/ReceberOS'
+import FolhasCasa from './views/FolhasCasa'
 import OrdensServico from './views/OrdensServico'
 import Equipes from './views/Equipes'
 import Usuarios from './views/Usuarios'
@@ -19,7 +20,7 @@ import Historico from './views/Historico'
 // =====================================================================
 // Tipo de navegação — espelha o NavView do AppShell
 // =====================================================================
-type NavView = 'cadastrar' | 'receber' | 'ordens' | 'equipes' | 'usuarios' | 'tipos' | 'historico'
+type NavView = 'cadastrar' | 'receber' | 'folhas' | 'ordens' | 'equipes' | 'usuarios' | 'tipos' | 'historico'
 
 // =====================================================================
 // Conteúdo interno — consome useAuth() e controla navegação
@@ -73,6 +74,8 @@ function AppContent() {
         return <CadastrarOS />
       case 'receber':
         return <ReceberOS />
+      case 'folhas':
+        return <FolhasCasa />
       case 'ordens':
         return <OrdensServico />
       case 'equipes':
