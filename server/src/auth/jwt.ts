@@ -1,6 +1,9 @@
 // =====================================================================
 // Geração e verificação de JWT (jsonwebtoken).
-// Expira via JWT_EXPIRES_IN (~15min, alinhado ao auto-logout do frontend).
+// Expiração por papel:
+//   - SUPERVISOR (e demais): JWT_EXPIRES_IN (~15min, alinhado ao auto-logout).
+//   - ADMIN: JWT_EXPIRES_IN_ADMIN (default 12h) — conta do dono não é
+//     derrubada por inatividade. Trade-off de segurança documentado no .env.
 // =====================================================================
 import jwt from 'jsonwebtoken'
 import type { SignOptions } from 'jsonwebtoken'
@@ -26,9 +29,12 @@ if (!JWT_SECRET_ENV || JWT_SECRET_ENV.length < 16) {
 // Constante já estreitada para `string` (o guard acima garante presença).
 const JWT_SECRET: string = JWT_SECRET_ENV
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '15m'
+// Sessão longa para ADMIN (dono) — não cair por inatividade.
+const JWT_EXPIRES_IN_ADMIN = process.env.JWT_EXPIRES_IN_ADMIN ?? '12h'
 
 export function gerarToken(payload: TokenPayload): string {
-  const opts: SignOptions = { expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'] }
+  const expiresIn = payload.papel === 'ADMIN' ? JWT_EXPIRES_IN_ADMIN : JWT_EXPIRES_IN
+  const opts: SignOptions = { expiresIn: expiresIn as SignOptions['expiresIn'] }
   return jwt.sign(payload, JWT_SECRET, opts)
 }
 

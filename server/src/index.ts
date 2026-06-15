@@ -18,8 +18,9 @@ import { usuariosRouter } from './routes/usuarios.js'
 import { equipesRouter } from './routes/equipes.js'
 import { tiposServicoRouter } from './routes/tiposServico.js'
 import { ordensRouter } from './routes/ordens.js'
+import { saidasRouter } from './routes/saidas.js'
+import { folhasRouter } from './routes/folhas.js'
 import { eventosRouter } from './routes/eventos.js'
-import { dashboardRouter } from './routes/dashboard.js'
 import { integracaoRouter } from './routes/integracao/exportServicos.js'
 
 const app = express()
@@ -43,8 +44,9 @@ app.use('/usuarios', requireAuth, requireAdmin, usuariosRouter)
 app.use('/equipes', requireAuth, equipesRouter)
 app.use('/tipos', requireAuth, tiposServicoRouter)
 app.use('/ordens', requireAuth, ordensRouter)
+app.use('/saidas', requireAuth, saidasRouter)
+app.use('/folhas', requireAuth, folhasRouter)
 app.use('/eventos', requireAuth, eventosRouter)
-app.use('/dashboard', requireAuth, dashboardRouter)
 app.use('/integracao', requireAuth, integracaoRouter)
 
 // 404 para rotas não registradas.

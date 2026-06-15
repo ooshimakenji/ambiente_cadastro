@@ -1,5 +1,5 @@
 // =====================================================================
-// schema.prisma — ambiental_cadastro
+// schema.prisma — ambiental_cadastro (redesign v3: OS multi-saída)
 // Provider SQLite nesta v1. Para migrar a PostgreSQL depois:
 //   1. provider = "postgresql"
 //   2. DATABASE_URL apontando p/ o Postgres da rede interna (.env)
@@ -7,7 +7,13 @@
 //   4. rodar `prisma migrate` — nenhuma query Prisma muda
 // Enums: NÃO usados (Prisma não suporta enum no provider sqlite).
 //   Campos de "enum" são String validada por zod no server, espelhando
-//   as constantes de app/src/lib/types.ts (StatusOS, Papel, etc.).
+//   as constantes de app/src/lib/types.ts (StatusOS, StatusSaida, etc.).
+//
+// MODELO v3 — rastreabilidade:
+//   OrdemServico (pai, sequencial @unique) 1—N Saida (append-only/imutável)
+//   OrdemServico 1—N FolhaEnvio (rastro das folhas físicas enviadas à casa)
+//   O status da OS é DERIVADO das saídas (cacheado em OrdemServico.status).
+//   NÃO há hard delete de OS/Saida — encerrar é estado (CANCELADA).
 // =====================================================================
 
 generator client {
@@ -31,9 +37,12 @@ model Usuario {
   criadoEm  DateTime @default(now())
 
   // relações reversas
-  ordensCriadas     OrdemServico[] @relation("OrdensCriadas")
-  ordensResponsavel OrdemServico[] @relation("OrdensResponsavel")
-  eventos           EventoAuditoria[]
+  ordensCriadas      OrdemServico[] @relation("OrdensCriadas")
+  saidasResponsavel  Saida[]        @relation("SaidasResponsavel")
+  saidasCriadas      Saida[]        @relation("SaidasCriadas")
+  folhasRecebidas    FolhaEnvio[]   @relation("FolhasRecebidas")
+  folhasCriadas      FolhaEnvio[]   @relation("FolhasCriadas")
+  eventos            EventoAuditoria[]
 
   @@index([equipeId])
 }
@@ -46,7 +55,7 @@ model Equipe {
   criadoEm  DateTime @default(now())
 
   usuarios Usuario[]
-  ordens   OrdemServico[]
+  saidas   Saida[]
 }
 
 model TipoServico {
@@ -59,35 +68,74 @@ model TipoServico {
   ordens OrdemServico[]
 }
 
+// Ordem de serviço (PAI). Identificada pelo `sequencial` bipado (imutável).
+// status é DERIVADO das saídas e cacheado aqui para consultas simples.
 model OrdemServico {
-  id          Int      @id @default(autoincrement())
-  sequencial  String   @unique // ID bipado da OS (imutável); não é mais autoincrement de negócio
-  anotacoes   String?
-  status      String   @default("PENDENTE") // PENDENTE|ATENDENDO|CONCLUIDA|CANCELADA
-  fotos       String? // COM_FOTOS | SEM_FOTOS | null (setado no recebimento)
-  criadoEm    DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-  concluidoEm DateTime?
+  id            Int       @id @default(autoincrement())
+  sequencial    String    @unique // ID bipado da OS (imutável)
+  status        String    @default("ABERTA") // ABERTA|CONCLUIDA|CANCELADA (derivado das saídas)
+  concluidoEm   DateTime?
+  enviadaCasaEm DateTime? // indicador "folha já foi à casa" (setado por FolhaEnvio)
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
 
   // relações
   tipoServicoId Int?
   tipoServico   TipoServico? @relation(fields: [tipoServicoId], references: [id])
-  equipeId      Int?
-  equipe        Equipe?  @relation(fields: [equipeId], references: [id])
-  responsavelId Int?
-  responsavel   Usuario? @relation("OrdensResponsavel", fields: [responsavelId], references: [id])
   criadoPorId   Int
-  criadoPor     Usuario  @relation("OrdensCriadas", fields: [criadoPorId], references: [id])
+  criadoPor     Usuario      @relation("OrdensCriadas", fields: [criadoPorId], references: [id])
+
+  // filhos (append-only — nunca deletados)
+  saidas Saida[]
+  folhas FolhaEnvio[]
 
   @@index([status])
-  @@index([equipeId])
-  @@index([responsavelId])
   @@index([tipoServicoId])
+}
+
+// Saída/atendimento (FILHO). Append-only/imutável: re-despachar a OS ADICIONA
+// uma saída, nunca sobrescreve as anteriores. NÃO há hard delete.
+model Saida {
+  id            Int       @id @default(autoincrement())
+  ordemId       Int
+  ordem         OrdemServico @relation(fields: [ordemId], references: [id])
+  equipeId      Int?
+  equipe        Equipe?   @relation(fields: [equipeId], references: [id])
+  responsavelId Int?
+  responsavel   Usuario?  @relation("SaidasResponsavel", fields: [responsavelId], references: [id])
+  status        String    @default("EM_CAMPO") // EM_CAMPO|CONCLUIDA|NAO_REALIZADO|CANCELADA
+  fotos         String? // COM_FOTOS | SEM_FOTOS | null
+  tipo          String    @default("CAMPO") // CAMPO | FOTO (FOTO = saída só p/ regularizar foto)
+  anotacoes     String?
+  criadoPorId   Int
+  criadoPor     Usuario   @relation("SaidasCriadas", fields: [criadoPorId], references: [id])
+  criadoEm      DateTime  @default(now())
+  recebidoEm    DateTime?
+
+  @@index([ordemId])
+  @@index([status])
+}
+
+// Folhas casa (rastro do envio do papel físico ao ambiente 2).
+// NÃO muda status da OS; só seta o indicador enviadaCasaEm.
+model FolhaEnvio {
+  id            Int      @id @default(autoincrement())
+  ordemId       Int
+  ordem         OrdemServico @relation(fields: [ordemId], references: [id])
+  descricao     String?
+  periodo       String // MANHA | TARDE
+  recebidoPorId Int?
+  recebidoPor   Usuario? @relation("FolhasRecebidas", fields: [recebidoPorId], references: [id])
+  criadoPorId   Int
+  criadoPor     Usuario  @relation("FolhasCriadas", fields: [criadoPorId], references: [id])
+  criadoEm      DateTime @default(now())
+
+  @@index([ordemId])
 }
 
 model EventoAuditoria {
   id         Int      @id @default(autoincrement())
-  entidade   String // OS | USUARIO | EQUIPE | TIPO_SERVICO
+  entidade   String // OS | SAIDA | FOLHA_ENVIO | USUARIO | EQUIPE | TIPO_SERVICO
   entidadeId Int
   acao       String // CRIACAO|ATUALIZACAO|MUDANCA_STATUS|EXCLUSAO|LOGIN|LOGOUT
   autorId    Int?

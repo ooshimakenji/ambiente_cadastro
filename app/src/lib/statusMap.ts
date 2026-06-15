@@ -1,32 +1,48 @@
 // =====================================================================
 // Mapeamento de status ↔ vocabulário do dashboard_servicos (status_campo).
-// Compatibilidade futura: o backend usa o mesmo mapeamento em
-// server/src/integracao/exportServicos.ts para GET /integracao/servicos.
-// ⚠️ Pares marcados (*) a revisar com o usuário ao implementar a integração.
+// Modelo v3: o status_campo é DERIVADO do status da OS + das saídas
+// (o backend usa a mesma lógica em routes/integracao/exportServicos.ts).
 // =====================================================================
 
-import type { StatusOS } from './types'
+import type { StatusOS, Saida } from './types'
 
 // status_campo da referência (valores observados no data.json)
 export type StatusCampo = 'nao_visitada' | 'visitada' | 'batedor' | 'atendendo' | 'concluida' | 'cancelada'
 
-// Nosso status (4 valores) → status_campo da referência.
+// Mapa simples por status da OS (fallback; ABERTA refina pelas saídas — ver derivarStatusCampo).
 export const STATUS_PARA_CAMPO: Record<StatusOS, StatusCampo> = {
-  PENDENTE: 'nao_visitada',
-  ATENDENDO: 'atendendo',
+  ABERTA: 'nao_visitada',
   CONCLUIDA: 'concluida',
   CANCELADA: 'cancelada',
 }
 
-// status_campo da referência → nosso status (inverso).
-// 'visitada'/'batedor' da referência colapsam em ATENDENDO no nosso modelo de 4 status.
+// status_campo da referência → nosso status da OS (colapsa os estados de ABERTA).
 export const CAMPO_PARA_STATUS: Record<StatusCampo, StatusOS> = {
-  nao_visitada: 'PENDENTE',
-  visitada: 'ATENDENDO',
-  batedor: 'ATENDENDO',
-  atendendo: 'ATENDENDO',
+  nao_visitada: 'ABERTA',
+  visitada: 'ABERTA',
+  batedor: 'ABERTA',
+  atendendo: 'ABERTA',
   concluida: 'CONCLUIDA',
   cancelada: 'CANCELADA',
+}
+
+// Derivação completa do status_campo a partir da OS + suas saídas.
+//   CONCLUIDA → concluida; CANCELADA → cancelada
+//   ABERTA: sem saída CAMPO → nao_visitada; alguma EM_CAMPO → atendendo;
+//           última saída CAMPO NAO_REALIZADO → batedor; senão atendendo.
+export function derivarStatusCampo(
+  status: StatusOS,
+  saidas: Pick<Saida, 'status' | 'tipo' | 'criadoEm'>[],
+): StatusCampo {
+  if (status === 'CONCLUIDA') return 'concluida'
+  if (status === 'CANCELADA') return 'cancelada'
+  const campo = saidas.filter((s) => s.tipo !== 'FOTO')
+  if (campo.length === 0) return 'nao_visitada'
+  if (campo.some((s) => s.status === 'EM_CAMPO')) return 'atendendo'
+  const ordenadas = [...campo].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))
+  const ultima = ordenadas[ordenadas.length - 1]
+  if (ultima.status === 'NAO_REALIZADO') return 'batedor'
+  return 'atendendo'
 }
 
 // Shape de uma OS no formato data.json do dashboard_servicos (read-only na view de preview)

@@ -63,6 +63,8 @@ function descricaoPadrao(
 ): string {
   const rotuloEntidade: Record<EntidadeAuditoria, string> = {
     OS: 'Ordem de serviço',
+    SAIDA: 'Saída',
+    FOLHA_ENVIO: 'Folha enviada',
     USUARIO: 'Usuário',
     EQUIPE: 'Equipe',
     TIPO_SERVICO: 'Tipo de serviço',

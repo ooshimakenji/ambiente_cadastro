@@ -41,15 +41,24 @@ Evoluir o `ambiental_cadastro` do modelo linear (1 OS = 1 registro, `sequencial 
 ## Checklist por fase
 
 ### Fase A — modelo + backend + contratos (Opus)
-- [ ] schema.prisma (OrdemServico/Saida/FolhaEnvio) + migração + seed (dev) + reset dev.db
-- [ ] domain.ts (STATUS_OS/STATUS_SAIDA/TIPO_SAIDA/PERIODO; entidades auditoria +SAIDA/+FOLHA_ENVIO)
-- [ ] rotas ordens (cadastrar=nova saída, sem 409; remover DELETE), saidas (receber por desfecho, saída foto)
-- [ ] rotas folhas (POST/GET) + indicador enviadaCasaEm
-- [ ] tipos/equipes DELETE-em-uso→409; remover /dashboard
-- [ ] export /integracao/servicos novo mapeamento
-- [ ] auth: JWT admin longo
-- [ ] contratos app/src/lib/types.ts + statusMap.ts
-- [ ] `npm run build` do server verde
+- [x] schema.prisma (OrdemServico/Saida/FolhaEnvio) + migração + seed (dev) + reset dev.db
+- [x] domain.ts (STATUS_OS/STATUS_SAIDA/TIPO_SAIDA/PERIODO; entidades auditoria +SAIDA/+FOLHA_ENVIO)
+- [x] rotas ordens (cadastrar=nova saída, sem 409; remover DELETE), saidas (receber por desfecho, saída foto)
+- [x] rotas folhas (POST/GET) + indicador enviadaCasaEm
+- [x] tipos/equipes DELETE-em-uso→409; remover /dashboard
+- [x] export /integracao/servicos novo mapeamento
+- [x] auth: JWT admin longo
+- [x] contratos app/src/lib/types.ts + statusMap.ts
+- [x] `npm run build` do server verde
+
+> **Fase A concluída (2026-06-15).** Migração `20260615070620_v3_os_multi_saida` aplicada;
+> seed verde (4 cenários); `tsc` verde. Rotas: `POST /ordens` (cadastrar/re-despacho),
+> `POST /ordens/:id/saida-foto`, `PATCH /saidas/:id/receber`, `POST|GET /folhas`. Sem `DELETE /ordens`.
+> Status da OS é derivado (`derivarStatusOS`); pendência de foto = saída CAMPO CONCLUIDA SEM_FOTOS
+> (`aguardandoFotos`), fechada quando a saída FOTO é recebida COM_FOTOS (marca a CAMPO como COM_FOTOS).
+> Contratos novos p/ Fase B: tipos `Saida`, `FolhaEnvio`, `OrdemServicoExpandida.saidas[]`;
+> DTOs `NovaOrdem`, `NovaSaidaFoto`, `ReceberSaida`, `NovaFolhaEnvio`; labels/cores STATUS_OS/STATUS_SAIDA.
+> `statusMap.derivarStatusCampo(status, saidas)` para o vocabulário do dashboard_servicos.
 
 ### Fase B — frontend fan-out
 - [ ] CadastrarOS (nova saída se sequencial existe; fix aviso Select)

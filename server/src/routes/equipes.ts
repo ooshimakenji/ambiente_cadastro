@@ -13,7 +13,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { registrarEvento } from '../audit/index.js'
-import { erro400, erro404 } from '../middleware/httpError.js'
+import { erro400, erro404, erro409 } from '../middleware/httpError.js'
 
 export const equipesRouter = Router()
 
@@ -151,6 +151,16 @@ equipesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunct
 
     const existente = await prisma.equipe.findUnique({ where: { id } })
     if (!existente) throw erro404('Equipe não encontrada')
+
+    // Pré-checagem de uso: bloqueia se houver usuários ou saídas referenciando.
+    const usuarios = await prisma.usuario.count({ where: { equipeId: id } })
+    const saidas = await prisma.saida.count({ where: { equipeId: id } })
+    const total = usuarios + saidas
+    if (total > 0) {
+      throw erro409(
+        `Não é possível excluir: em uso por ${total} registro(s) (${usuarios} usuário(s), ${saidas} saída(s)) — desative em vez de excluir.`,
+      )
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.equipe.delete({ where: { id } })

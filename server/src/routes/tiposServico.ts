@@ -140,6 +140,14 @@ tiposServicoRouter.delete('/:id', async (req: Request, res: Response, next: Next
     const existente = await prisma.tipoServico.findUnique({ where: { id } })
     if (!existente) throw erro404('Tipo de serviço não encontrado')
 
+    // Pré-checagem de uso: bloqueia a exclusão se houver OS referenciando.
+    const emUso = await prisma.ordemServico.count({ where: { tipoServicoId: id } })
+    if (emUso > 0) {
+      throw erro409(
+        `Não é possível excluir: em uso por ${emUso} ordem(ns) de serviço — desative em vez de excluir.`,
+      )
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.tipoServico.delete({ where: { id } })
       await registrarEvento(

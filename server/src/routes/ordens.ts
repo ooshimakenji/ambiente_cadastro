@@ -1,135 +1,45 @@
 // =====================================================================
-// Router de ordens de serviço.
-//   GET    /ordens                  → OrdemServicoExpandida[] (filtros: status, equipeId, responsavelId, fotos, sequencial)
-//   GET    /ordens/:id              → OrdemServicoExpandida + { eventos: EventoAuditoriaComAutor[] }
-//   POST   /ordens                  → OrdemServico (usa sequencial bipado; ATENDENDO se vier equipe, senão PENDENTE)
-//   PATCH  /ordens/:id              → OrdemServico (edição de campos; sequencial é imutável)
-//   PATCH  /ordens/:id/status       → OrdemServico (valida TRANSICOES_STATUS; Atender/Cancelar)
-//   PATCH  /ordens/:id/receber      → OrdemServico (seta fotos + status CONCLUIDA + concluidoEm)
-//   DELETE /ordens/:id              → 204
+// Router de ordens de serviço (modelo v3: OS pai → N saídas).
+//   GET    /ordens                  → OrdemServicoExpandida[] (com saidas[])
+//                                      filtros: status, sequencial, tipoServicoId,
+//                                      aguardandoFotos (bool)
+//   GET    /ordens/:id              → OrdemServicoExpandida + { eventos: [] }
+//   POST   /ordens                  → cadastra (cria OS+1ª saída OU nova saída se já existe)
+//   POST   /ordens/:id/saida-foto   → cria saída tipo=FOTO p/ regularizar foto
 //
-// Auditoria: toda mutação chama registrarEvento dentro da MESMA prisma.$transaction.
-// Migração futura a Postgres: nenhuma mudança necessária aqui.
+// NÃO há DELETE (rastreabilidade: sem hard delete; cancelar é estado).
+// O status da OS é DERIVADO das saídas (ver lib/derivar.ts), atualizado
+// dentro das transações. Auditoria em toda mutação (mesma $transaction).
 // =====================================================================
 import { Router } from 'express'
 import type { Request, Response, NextFunction } from 'express'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { registrarEvento } from '../audit/index.js'
 import { erro400, erro404, erro409 } from '../middleware/httpError.js'
-import { STATUS_OS, TRANSICOES_STATUS } from '../domain.js'
-import type { StatusOS } from '../domain.js'
+import { STATUS_OS } from '../domain.js'
+import {
+  includeExpandida,
+  serializarOSExpandida,
+  serializarEvento,
+  snapshotSaida,
+  derivarStatusOS,
+  aguardandoFotos,
+} from './lib/ordensShared.js'
 
 export const ordensRouter = Router()
-
-// ---------- Selects reutilizáveis ----------
-
-const includeExpandida = {
-  tipoServico: { select: { id: true, nome: true } },
-  equipe: { select: { id: true, nome: true } },
-  responsavel: { select: { id: true, nome: true } },
-  criadoPor: { select: { id: true, nome: true } },
-} as const
-
-// ---------- helpers de serialização ----------
-
-type OSPrisma = {
-  id: number
-  sequencial: string
-  anotacoes: string | null
-  tipoServicoId: number | null
-  status: string
-  fotos: string | null
-  equipeId: number | null
-  responsavelId: number | null
-  criadoPorId: number
-  criadoEm: Date
-  atualizadoEm: Date
-  concluidoEm: Date | null
-}
-
-type OSExpandidaPrisma = OSPrisma & {
-  tipoServico: { id: number; nome: string } | null
-  equipe: { id: number; nome: string } | null
-  responsavel: { id: number; nome: string } | null
-  criadoPor: { id: number; nome: string }
-}
-
-function serializarOS(os: OSPrisma) {
-  return {
-    id: os.id,
-    sequencial: os.sequencial,
-    anotacoes: os.anotacoes,
-    tipoServicoId: os.tipoServicoId,
-    status: os.status,
-    fotos: os.fotos,
-    equipeId: os.equipeId,
-    responsavelId: os.responsavelId,
-    criadoPorId: os.criadoPorId,
-    criadoEm: os.criadoEm.toISOString(),
-    atualizadoEm: os.atualizadoEm.toISOString(),
-    concluidoEm: os.concluidoEm ? os.concluidoEm.toISOString() : null,
-  }
-}
-
-function serializarOSExpandida(os: OSExpandidaPrisma) {
-  return {
-    ...serializarOS(os),
-    tipoServico: os.tipoServico ? { id: os.tipoServico.id, nome: os.tipoServico.nome } : null,
-    equipe: os.equipe ? { id: os.equipe.id, nome: os.equipe.nome } : null,
-    responsavel: os.responsavel ? { id: os.responsavel.id, nome: os.responsavel.nome } : null,
-    criadoPor: { id: os.criadoPor.id, nome: os.criadoPor.nome },
-  }
-}
-
-function serializarEvento(ev: {
-  id: number
-  entidade: string
-  entidadeId: number
-  acao: string
-  autorId: number | null
-  descricao: string
-  diff: string | null
-  criadoEm: Date
-  autor: { id: number; nome: string } | null
-}) {
-  return {
-    id: ev.id,
-    entidade: ev.entidade,
-    entidadeId: ev.entidadeId,
-    acao: ev.acao,
-    autorId: ev.autorId,
-    descricao: ev.descricao,
-    diff: ev.diff,
-    criadoEm: ev.criadoEm.toISOString(),
-    autor: ev.autor ? { id: ev.autor.id, nome: ev.autor.nome } : null,
-  }
-}
-
-// ---------- Snapshot de OS para diff ----------
-
-function snapshotOS(os: OSPrisma): Record<string, unknown> {
-  return {
-    sequencial: os.sequencial,
-    anotacoes: os.anotacoes,
-    tipoServicoId: os.tipoServicoId,
-    fotos: os.fotos,
-    status: os.status,
-    equipeId: os.equipeId,
-    responsavelId: os.responsavelId,
-    concluidoEm: os.concluidoEm,
-  }
-}
 
 // ---------- Schemas zod ----------
 
 const filtroOrdensSchema = z.object({
   status: z.enum(STATUS_OS).optional(),
-  equipeId: z.coerce.number().int().positive().optional(),
-  responsavelId: z.coerce.number().int().positive().optional(),
-  fotos: z.enum(['COM_FOTOS', 'SEM_FOTOS']).optional(),
+  tipoServicoId: z.coerce.number().int().positive().optional(),
   sequencial: z.string().trim().min(1).optional(),
+  // "aguardando fotos": OS CONCLUIDA com saída concluída SEM_FOTOS não regularizada.
+  aguardandoFotos: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 })
 
 const novaOrdemSchema = z.object({
@@ -140,15 +50,10 @@ const novaOrdemSchema = z.object({
   anotacoes: z.string().nullable().optional(),
 })
 
-// Edição NÃO permite alterar o sequencial (ID bipado imutável).
-const editarOrdemSchema = novaOrdemSchema.partial().omit({ sequencial: true })
-
-const mudarStatusSchema = z.object({
-  status: z.enum(STATUS_OS),
-})
-
-const receberOrdemSchema = z.object({
-  fotos: z.enum(['COM_FOTOS', 'SEM_FOTOS']),
+const saidaFotoSchema = z.object({
+  equipeId: z.number().int().positive().nullable().optional(),
+  responsavelId: z.number().int().positive().nullable().optional(),
+  anotacoes: z.string().nullable().optional(),
 })
 
 // ---------- GET /ordens ----------
@@ -159,9 +64,7 @@ ordensRouter.get('/', async (req: Request, res: Response, next: NextFunction) =>
 
     const where: Record<string, unknown> = {}
     if (filtros.status) where.status = filtros.status
-    if (filtros.equipeId) where.equipeId = filtros.equipeId
-    if (filtros.responsavelId) where.responsavelId = filtros.responsavelId
-    if (filtros.fotos) where.fotos = filtros.fotos
+    if (filtros.tipoServicoId) where.tipoServicoId = filtros.tipoServicoId
     if (filtros.sequencial) where.sequencial = filtros.sequencial
 
     const ordens = await prisma.ordemServico.findMany({
@@ -170,7 +73,12 @@ ordensRouter.get('/', async (req: Request, res: Response, next: NextFunction) =>
       include: includeExpandida,
     })
 
-    res.json(ordens.map(serializarOSExpandida))
+    let lista = ordens.map(serializarOSExpandida)
+    if (filtros.aguardandoFotos !== undefined) {
+      lista = lista.filter((os) => aguardandoFotos(os.saidas) === filtros.aguardandoFotos)
+    }
+
+    res.json(lista)
   } catch (e) {
     next(e)
   }
@@ -204,226 +112,159 @@ ordensRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
   }
 })
 
-// ---------- POST /ordens ----------
-
+// ---------- POST /ordens (cadastrar / re-despachar) ----------
+// Sequencial NOVO  → cria OrdemServico (ABERTA) + (se houver equipe) 1ª Saida EM_CAMPO.
+// Sequencial EXISTE → cria NOVA Saida (re-despacho). NÃO retorna 409.
 ordensRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dados = novaOrdemSchema.parse(req.body)
     const autorId = req.usuario!.id
 
-    // Regra de nascimento: com equipe → ATENDENDO; sem equipe → PENDENTE.
-    const statusInicial: StatusOS = dados.equipeId ? 'ATENDENDO' : 'PENDENTE'
+    const resultado = await prisma.$transaction(async (tx) => {
+      const existente = await tx.ordemServico.findUnique({ where: { sequencial: dados.sequencial } })
 
-    const nova = await prisma.$transaction(async (tx) => {
-      const os = await tx.ordemServico.create({
+      if (!existente) {
+        // Nasce a OS (ABERTA). Com equipe → já cria a 1ª saída EM_CAMPO.
+        const os = await tx.ordemServico.create({
+          data: {
+            sequencial: dados.sequencial,
+            tipoServicoId: dados.tipoServicoId,
+            status: 'ABERTA',
+            criadoPorId: autorId,
+          },
+        })
+        await registrarEvento(
+          {
+            entidade: 'OS',
+            entidadeId: os.id,
+            acao: 'CRIACAO',
+            autorId,
+            depois: { sequencial: os.sequencial, tipoServicoId: os.tipoServicoId, status: os.status },
+            descricao: `OS ${os.sequencial} cadastrada`,
+          },
+          tx,
+        )
+
+        if (dados.equipeId) {
+          const saida = await tx.saida.create({
+            data: {
+              ordemId: os.id,
+              equipeId: dados.equipeId,
+              responsavelId: dados.responsavelId ?? null,
+              status: 'EM_CAMPO',
+              tipo: 'CAMPO',
+              anotacoes: dados.anotacoes ?? null,
+              criadoPorId: autorId,
+            },
+          })
+          await registrarEvento(
+            {
+              entidade: 'SAIDA',
+              entidadeId: saida.id,
+              acao: 'CRIACAO',
+              autorId,
+              depois: snapshotSaida(saida),
+              descricao: `OS ${os.sequencial}: 1ª saída em campo`,
+            },
+            tx,
+          )
+        }
+        return tx.ordemServico.findUnique({ where: { id: os.id }, include: includeExpandida })
+      }
+
+      // OS já existe → re-despacho: nova saída EM_CAMPO.
+      if (existente.status === 'CANCELADA') {
+        throw erro409(`OS ${existente.sequencial} está CANCELADA — não aceita novas saídas`)
+      }
+      const saida = await tx.saida.create({
         data: {
-          sequencial: dados.sequencial,
-          anotacoes: dados.anotacoes ?? null,
-          tipoServicoId: dados.tipoServicoId,
-          status: statusInicial,
+          ordemId: existente.id,
           equipeId: dados.equipeId ?? null,
           responsavelId: dados.responsavelId ?? null,
+          status: 'EM_CAMPO',
+          tipo: 'CAMPO',
+          anotacoes: dados.anotacoes ?? null,
           criadoPorId: autorId,
         },
       })
-
       await registrarEvento(
         {
-          entidade: 'OS',
-          entidadeId: os.id,
+          entidade: 'SAIDA',
+          entidadeId: saida.id,
           acao: 'CRIACAO',
           autorId,
-          depois: snapshotOS(os),
+          depois: snapshotSaida(saida),
+          descricao: `OS ${existente.sequencial}: nova saída em campo (re-despacho)`,
         },
         tx,
       )
 
-      return os
+      // Re-despacho de uma OS concluída a reabre (há trabalho em campo de novo).
+      const saidas = await tx.saida.findMany({ where: { ordemId: existente.id } })
+      const novoStatus = derivarStatusOS(saidas)
+      if (novoStatus !== existente.status || existente.concluidoEm) {
+        await tx.ordemServico.update({
+          where: { id: existente.id },
+          data: { status: novoStatus, concluidoEm: novoStatus === 'CONCLUIDA' ? existente.concluidoEm : null },
+        })
+      }
+      return tx.ordemServico.findUnique({ where: { id: existente.id }, include: includeExpandida })
     })
 
-    res.status(201).json(serializarOS(nova))
-  } catch (e) {
-    // Sequencial duplicado (unique) → 409.
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      return next(erro409('Já existe uma OS com este sequencial'))
-    }
-    next(e)
-  }
-})
-
-// ---------- PATCH /ordens/:id ----------
-
-ordensRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id)
-    if (!Number.isInteger(id) || id <= 0) throw erro400('ID inválido')
-
-    const dados = editarOrdemSchema.parse(req.body)
-    const autorId = req.usuario!.id
-
-    const existente = await prisma.ordemServico.findUnique({ where: { id } })
-    if (!existente) throw erro404('Ordem de serviço não encontrada')
-
-    const updateData: Record<string, unknown> = {}
-    if (dados.anotacoes !== undefined) updateData.anotacoes = dados.anotacoes
-    if (dados.tipoServicoId !== undefined) updateData.tipoServicoId = dados.tipoServicoId
-    if (dados.equipeId !== undefined) updateData.equipeId = dados.equipeId
-    if (dados.responsavelId !== undefined) updateData.responsavelId = dados.responsavelId
-
-    if (Object.keys(updateData).length === 0) throw erro400('Nenhum campo para atualizar')
-
-    const antes = snapshotOS(existente)
-
-    const atualizada = await prisma.$transaction(async (tx) => {
-      const os = await tx.ordemServico.update({ where: { id }, data: updateData })
-      await registrarEvento(
-        {
-          entidade: 'OS',
-          entidadeId: id,
-          acao: 'ATUALIZACAO',
-          autorId,
-          antes,
-          depois: snapshotOS(os),
-        },
-        tx,
-      )
-      return os
-    })
-
-    res.json(serializarOS(atualizada))
+    res.status(201).json(serializarOSExpandida(resultado!))
   } catch (e) {
     next(e)
   }
 })
 
-// ---------- PATCH /ordens/:id/status ----------
-
-ordensRouter.patch('/:id/status', async (req: Request, res: Response, next: NextFunction) => {
+// ---------- POST /ordens/:id/saida-foto ----------
+// Cria uma saída tipo=FOTO (EM_CAMPO) p/ regularizar foto de OS concluída-sem-foto.
+// A regularização se concretiza no recebimento dessa saída (PATCH /saidas/:id/receber
+// com fotos=COM_FOTOS), que marca a saída CAMPO concluída SEM_FOTOS como COM_FOTOS.
+ordensRouter.post('/:id/saida-foto', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Number(req.params.id)
     if (!Number.isInteger(id) || id <= 0) throw erro400('ID inválido')
 
-    const { status: novoStatus } = mudarStatusSchema.parse(req.body)
+    const dados = saidaFotoSchema.parse(req.body)
     const autorId = req.usuario!.id
 
-    const existente = await prisma.ordemServico.findUnique({ where: { id } })
-    if (!existente) throw erro404('Ordem de serviço não encontrada')
-
-    const statusAtual = existente.status as StatusOS
-    const transicoesPermitidas = TRANSICOES_STATUS[statusAtual]
-
-    if (!transicoesPermitidas.includes(novoStatus)) {
-      throw erro409(
-        `Transição inválida: ${statusAtual} → ${novoStatus}. Permitidas: [${transicoesPermitidas.join(', ') || 'nenhuma'}]`,
-      )
-    }
-
-    const updateData: Record<string, unknown> = { status: novoStatus }
-    if (novoStatus === 'CONCLUIDA') {
-      updateData.concluidoEm = new Date()
-    }
-
-    const antes = snapshotOS(existente)
-
-    const atualizada = await prisma.$transaction(async (tx) => {
-      const os = await tx.ordemServico.update({ where: { id }, data: updateData })
-      await registrarEvento(
-        {
-          entidade: 'OS',
-          entidadeId: id,
-          acao: 'MUDANCA_STATUS',
-          autorId,
-          antes,
-          depois: snapshotOS(os),
-          descricao: `OS ${existente.sequencial}: status alterado de ${statusAtual} para ${novoStatus}`,
-        },
-        tx,
-      )
-      return os
+    const os = await prisma.ordemServico.findUnique({
+      where: { id },
+      include: { saidas: true },
     })
-
-    res.json(serializarOS(atualizada))
-  } catch (e) {
-    next(e)
-  }
-})
-
-// ---------- PATCH /ordens/:id/receber ----------
-// Finaliza a OS no recebimento: registra fotos, marca CONCLUIDA e concluidoEm.
-ordensRouter.patch('/:id/receber', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id)
-    if (!Number.isInteger(id) || id <= 0) throw erro400('ID inválido')
-
-    const { fotos } = receberOrdemSchema.parse(req.body)
-    const autorId = req.usuario!.id
-
-    const existente = await prisma.ordemServico.findUnique({ where: { id } })
-    if (!existente) throw erro404('Ordem de serviço não encontrada')
-
-    const statusAtual = existente.status as StatusOS
-    if (statusAtual !== 'ATENDENDO' && statusAtual !== 'PENDENTE') {
-      throw erro409(
-        `OS ${existente.sequencial} não pode ser recebida no status ${statusAtual} (esperado ATENDENDO ou PENDENTE)`,
-      )
+    if (!os) throw erro404('Ordem de serviço não encontrada')
+    if (!aguardandoFotos(os.saidas)) {
+      throw erro409(`OS ${os.sequencial} não está aguardando fotos`)
     }
 
-    const antes = snapshotOS(existente)
-    const rotuloFotos = fotos === 'COM_FOTOS' ? 'com fotos' : 'sem fotos — equipe cobrada'
-
-    const atualizada = await prisma.$transaction(async (tx) => {
-      const os = await tx.ordemServico.update({
-        where: { id },
-        data: { fotos, status: 'CONCLUIDA', concluidoEm: new Date() },
+    const resultado = await prisma.$transaction(async (tx) => {
+      const saida = await tx.saida.create({
+        data: {
+          ordemId: id,
+          equipeId: dados.equipeId ?? null,
+          responsavelId: dados.responsavelId ?? null,
+          status: 'EM_CAMPO',
+          tipo: 'FOTO',
+          anotacoes: dados.anotacoes ?? null,
+          criadoPorId: autorId,
+        },
       })
       await registrarEvento(
         {
-          entidade: 'OS',
-          entidadeId: id,
-          acao: 'MUDANCA_STATUS',
+          entidade: 'SAIDA',
+          entidadeId: saida.id,
+          acao: 'CRIACAO',
           autorId,
-          antes,
-          depois: snapshotOS(os),
-          descricao: `OS ${existente.sequencial}: finalizada (${rotuloFotos})`,
+          depois: snapshotSaida(saida),
+          descricao: `OS ${os.sequencial}: saída de foto (regularização)`,
         },
         tx,
       )
-      return os
+      return tx.ordemServico.findUnique({ where: { id }, include: includeExpandida })
     })
 
-    res.json(serializarOS(atualizada))
-  } catch (e) {
-    next(e)
-  }
-})
-
-// ---------- DELETE /ordens/:id ----------
-
-ordensRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = Number(req.params.id)
-    if (!Number.isInteger(id) || id <= 0) throw erro400('ID inválido')
-
-    const autorId = req.usuario!.id
-
-    const existente = await prisma.ordemServico.findUnique({ where: { id } })
-    if (!existente) throw erro404('Ordem de serviço não encontrada')
-
-    await prisma.$transaction(async (tx) => {
-      await tx.ordemServico.delete({ where: { id } })
-      await registrarEvento(
-        {
-          entidade: 'OS',
-          entidadeId: id,
-          acao: 'EXCLUSAO',
-          autorId,
-          antes: snapshotOS(existente),
-        },
-        tx,
-      )
-    })
-
-    res.status(204).end()
+    res.status(201).json(serializarOSExpandida(resultado!))
   } catch (e) {
     next(e)
   }
